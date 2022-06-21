@@ -70,11 +70,6 @@ int validatePayload(__u8 *Payload, __u32 payload_size);
 int validateMessage(__u8 *buf, __u32 received_bytes);
 
 
-/* prototypes from buildMessages.cpp */
-__u8 *buildPayload(TDataItemID ID, __u8 *DataItem, __u8 dataLength, __u8 &payloadLen);
-__u8 *buildMessage(TMessageID MessageID, __u8 *Payload, TMessagePayloadSize PayloadLen, __u16 &messageSize);
-
-
 // CLASSY ----------------------------
 
 class TDataItem {
