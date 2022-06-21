@@ -1,5 +1,5 @@
 #include "parser.h"
-#define DEBUG_PRINT_RAW 0
+#define DEBUG_PRINT_RAW 1
 
 void print_dataitem(__u8 *dataitem)
 {

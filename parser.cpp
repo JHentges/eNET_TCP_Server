@@ -5,27 +5,25 @@ Write functions to
 ) Build Messages with zero or more DataItems as the Message `Payload`
 ) Append DataItems to already built Messages
 ) Validate a Message is well-formed (which also means all DataItems are well-formed)
-) 
+)
 ) Parse the Message into a queue of Actions
 ) Execute the queue
 
 A Message is a sequence of bytes received by the TCP Server (across TCP/IP) in this format:
-    SCMidLL_C
+    MLL_C
 where
-    S       is the START symbol
-    C       is the category of the Message
-    Mid     is a Message ID#, which may be mnemonic/logical
+    M       is a Message ID# ("MId"), which may be mnemonic/logical
     LL      is the Length of an optional payload
     _       is zero or more bytes, the optional payload's data
     C       is the checksum for all bytes in MMMM, LL, and _
 
-Given: checksum is calculated on all bytes in Message except the "start sentinel"; the sum, including the checksum, should be zero
+Given: checksum is calculated on all bytes in Message; the sum, including the checksum, should be zero
 
 Further, the payload is an ordered list of zero or more Data Items, which are themselves a sequence of bytes, in this format:
-    LDid_
+    DDDL_
 where
-    L       is the length of the data encapsulated in this data item (in bytes) (exclusing L and Did)
-    Did     is the Data ID#, which identifies the *type* of data encapsulated in this data item
+    DDD     is the Data ID# ("DId"), which identifies the *type* of data encapsulated in this data item
+    L       is the length of the data encapsulated in this data item (in bytes) (excluding L and Did)
     _       is the Data Item's payload, or "the data"; `byte[L] Data`
 */
 
@@ -51,6 +49,7 @@ int validateDataItem(__u8 *DataItem)
     int result = 0;
     TDataItemLength DataItemSize = DataItem[0];
     TDataItemID dataItemID;
+    dataItemID.DataItemID = 0;
     dataItemID.Did[0] = DataItem[0];
     dataItemID.Did[1] = DataItem[1];
     dataItemID.Did[2] = DataItem[2];

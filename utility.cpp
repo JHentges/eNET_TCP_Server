@@ -2,13 +2,11 @@
 
 const TMessageID ValidMessages[] = {
    'Q','R','C',
-    // NOTE: FOURCC("QDIn") type of constants are expected to be used for the Message IDs, eventually.
 };
 
 const TDataItemID ValidDataItemIDs[] = {
 	0x000001, 0x000002, 0x000003, 0x000004, 0x000005,
-	0x000006, 0x000007, 0x000008, 0x000009, 0x00000a
-	// NOTE: FOURCC("QDIn") type of constants are expected to be used for the DataItem IDs, eventually.
+	0x000006, 0x000007, 0x000008, 0x000009, 0x00000a,
 };
 
 bool isValidMessageID(TMessageID MessageID) 
@@ -24,16 +22,16 @@ bool isValidMessageID(TMessageID MessageID)
 }
 
 // Sums all bytes in Message except the start sentinel, specifically including the checksum byte
-// WARNING: only works if TChecksum is a byte
+// WARNING: this algorithm only works if TChecksum is a byte
 TCheckSum calculateChecksum(__u8 Message[], __u32 MessageLength) 
 {
     TCheckSum checksum = 0;
     for (__u32 i = 0; i < MessageLength-1; i++)        
         checksum += Message[i];
 
-    if (__diag_print_csum != 0)
-     printf("                                 calculated checksum: %02X\n", (-checksum & 0xFF));
-
+#if (__diag_print_csum != 0)
+        printf("                                 calculated checksum: %02X\n", (-checksum & 0xFF));
+#endif
     checksum += Message[MessageLength-1];
     return checksum;
 }
