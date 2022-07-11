@@ -128,7 +128,7 @@ int TDataItem::validateDataItem(TBytes msg)
 		return ERR_MSG_DATAITEM_TOO_SHORT;
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
 
-	TDataItemLength DataItemSize = head->dataLength; // WARN: only works if length field is one byte
+	TDataItemLength DataItemSize = head->dataLength; // WARN: only works if TDataItemHeader length field is one byte
 	DataItemIds Id = head->DId;
 	if (!isValidDataItemID(Id))
 	{
@@ -166,25 +166,14 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 	TBytes data;
 	data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
 
-	result = validateDataItemPayload(head->DId, data); // TODO: change to parseData that returns vector of classes-of-data-types
+	result = validateDataItemPayload(head->DId, data);
 	if (result != ERR_SUCCESS)
 		return PTDataItem(new TDataItem());
 
-	// TODO: replace this with an array of structs that hold each DId and its respective constructor or whatever,
-	//       so the switch() goes away and this .fromBytes() function doesn't need editing to add new DId's classes
-	// something like:
-	//	for(auto entry : DIdList)
-	//	{
-	//		if (entry->DId == head->DId)
-	//			return PTDataItem(new entry->DIdClass(head->DId, data));
-	//	 }
-	switch(head->DId){
-		case DataItemIds::REG_Read1:
-			return PTDataItem(new TDIdReadRegister(head->DId, data[0]));
-			break;
-		default:
-			break;
-		}
+	for(auto entry : DIdList)
+		if (entry.DId == head->DId)
+			return entry.Construct();
+
 	return PTDataItem(new TDataItem(head->DId, data));
 }
 #pragma endregion
@@ -366,7 +355,12 @@ TBytes TDIdReadRegister::AsBytes()
 string TDIdReadRegister::AsString()
 {
 	stringstream dest;
-	dest << "DataItem = " << this->getDIdDesc() << " [" << this->width << " bit] from Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset);
+	dest << "DataItem = " << this->getDIdDesc() << " [";
+	if (this->width == 8)
+		dest << " " << this->width;
+	else
+		dest << this->width;
+	dest << " bit] from Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset);
 	return dest.str();
 }
 #pragma endregion
@@ -401,7 +395,7 @@ bool TMessage::isValidMessageID(TMessageId MessageId)
 // "A Message has an optional Payload, which is a sequence of zero or more Data Items"
 TError TMessage::validatePayload(TBytes Payload)
 {
-	printf("WARN: Does not work as expected when parsing multiple DataItems\n");
+	// WARN: Does not seem to work as expected when parsing multiple DataItems
 	TError result = ERR_SUCCESS;
 	if (Payload.size() == 1) // one-byte Payload is the checksum byte.
 		return result;

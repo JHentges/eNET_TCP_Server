@@ -75,7 +75,6 @@ int main(void) // "TEST"
     test(M3.AsBytes(), "addDataItem(TDataItem)");
 #endif
 
-    // srand(time(0));
 
 #ifdef TEST_ParseMessage
     TMessageId MId_C = 'C';
@@ -86,8 +85,7 @@ int main(void) // "TEST"
     Message.addDataItem(item);
     test(Message.AsBytes(), "TMessage(BRD_Reset())", ERR_SUCCESS);
 
-    cout << "----------------------" << endl
-         << "TEST addDataItem(TDIdReadRegister) with offset that's a 32-bit wide register " << endl;
+    cout << "TEST addDataItem(TDIdReadRegister) with offset that's a 32-bit wide register " << endl;
     std::shared_ptr<TDIdReadRegister> read32(new TDIdReadRegister(DataItemIds::REG_Read1, 0x20));
     Message.addDataItem(read32);
     cout << Message.AsString() << endl;
@@ -99,8 +97,8 @@ int main(void) // "TEST"
     cout << Message.AsString() << endl;
 
     TError res;
-    cout << "----------------------" << endl
-         << "TEST FromBytes() of above " << endl;
+    cout << "----------------------" << endl;
+    cout << "TEST FromBytes() of above " << endl;
     TMessage aMsg = TMessage::FromBytes(Message.AsBytes(), res);
 
     cout << "res = " << (int)res << ", built aMsg without excepting" <<endl;
@@ -108,11 +106,11 @@ int main(void) // "TEST"
     string str = aMsg.AsString();
     cout << str << endl;
 
-
+    cout << "----------------------" << endl;
     item->addData(7).addData(8);
 
     cout << Message.AsString() << endl;
-    test(Message.AsBytes(), "TMessage(BRD_Reset(7,8) (should be ()))", ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH);
+    test(Message.AsBytes(), "TMessage(BRD_Reset(7,8) (should be (void)))", ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH);
 
 #endif
     }catch (logic_error e){

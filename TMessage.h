@@ -216,19 +216,6 @@ public:
 	TDataItemNYI() = default;
 };
 #pragma endregion
-#pragma region class TDIdWriteRegister : TDataItem for REG_Write1 "Write Register Value"
-class TDIdWriteRegister : public TDataItem
-{
-public:
-
-};
-#pragma endregion
-#pragma region "DAC Output"
-class TDIdDacOutput : public TDataItem
-{
-	public:
-};
-#pragma endregion
 #pragma region class TDIdReadRegister : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
 class TDIdReadRegister : public TDataItem
 {
@@ -251,7 +238,19 @@ public:
 };
 
 #pragma endregion
+#pragma region class TDIdWriteRegister : TDataItem for REG_Write1 "Write Register Value"
+class TDIdWriteRegister : public TDataItem
+{
+public:
 
+};
+#pragma endregion
+#pragma region "DAC Output"
+class TDIdDacOutput : public TDataItem
+{
+	public:
+};
+#pragma endregion
 #pragma region class TMessage declaration
 class TMessage
 {
@@ -295,21 +294,17 @@ public:
 
 protected:
 	TMessageId Id;
-	// vector<TDataItem*> DataItems;
 	TPayload DataItems;
 };
 #pragma endregion TMessage declaration
 
-TMessage FromBytes(TBytes buf, TError &result);
-
-
-template <class X>
-TDataItem * construct() { return new X; }
+// utility template to turn class into base-class-pointer-to-instance-on-heap
+template <class X> std::unique_ptr<TDataItem> construct() { return std::unique_ptr<TDataItem>(new X); }
 
 // template <class X>
-// TDataItem * construct(Arg...) { return new X(Arg...); }
+// std::unique_ptr<TDataItem> construct(Arg...) { return std::unique_ptr<TDataItem>(new X(Arg...)); }
 
-typedef TDataItem * DIdConstructor();
+typedef std::unique_ptr<TDataItem> DIdConstructor();
 
 typedef struct
 {
@@ -322,6 +317,7 @@ typedef struct
 } TDIdList;
 
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
+
 TDIdList const DIdList[] = {
 	{_INVALID_DATAITEMID_, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
