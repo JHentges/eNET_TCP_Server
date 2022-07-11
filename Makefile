@@ -1,10 +1,7 @@
 all: test
 
-test:	test.cpp parser.h diag.h parser.cpp utility.cpp consts.cpp 
-	g++ -std=gnu++17 -o test test.cpp parser.cpp utility.cpp consts.cpp -lm -lpthread -O3
-
-eNET-TCP-Server:	eNET-TCP-Server.cpp parser.cpp utility.cpp consts.cpp test.cpp
-	gcc -std=gnu++17 -o eNET-TCP-Server eNET-TCP-Server.cpp parser.cpp utility.cpp consts.cpp test.cpp -lm -lpthread -O3
+test:	test.cpp eNET-types.h TMessage.cpp TMessage.h
+	g++ -g -std=gnu++2a -o test test.cpp TMessage.cpp -lm -lpthread 
 
 clean:
 	rm -f test
