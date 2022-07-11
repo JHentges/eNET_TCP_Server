@@ -1,6 +1,7 @@
 #include <ctime>
 #include <random>
 #include <iostream>
+#include "eNET-types.h"
 #include "TMessage.h"
 
 using namespace std;
@@ -79,55 +80,46 @@ int main(void) // "TEST"
 #ifdef TEST_ParseMessage
     TMessageId MId_C = 'C';
     TMessage Message = TMessage(MId_C);
-   
-    TDataItem item = TDataItem(6).addData(7).addData(8);
-    Message.addDataItem(&item);
-    
-    cout << Message.AsString() << endl;
-    test(Message.AsBytes(), "TMessage(MId) constructor, one DataItem");
 
-    // cout << "TEST addDataItem(DIdReadRegister)" << endl;
-    // DIdReadRegister read8 = DIdReadRegister(DIdRead8, 1);
-    // TBytes thebytes = read8.AsBytes();
-    // Message.addDataItem(&read8);
-    // cout << Message.AsString() << endl;
+    PTDataItem item(new TDataItem(DataItemIds::BRD_Reset));
+
+    Message.addDataItem(item);
+    test(Message.AsBytes(), "TMessage(BRD_Reset())", ERR_SUCCESS);
+
+    cout << "----------------------" << endl
+         << "TEST addDataItem(TDIdReadRegister) with offset that's a 32-bit wide register " << endl;
+    std::shared_ptr<TDIdReadRegister> read32(new TDIdReadRegister(DataItemIds::REG_Read1, 0x20));
+    Message.addDataItem(read32);
+    cout << Message.AsString() << endl;
+
+    cout << "----------------------" << endl;
+    cout << "TEST addDataItem(TDIdReadRegister)" << endl;
+    std::shared_ptr<TDIdReadRegister> read8(new TDIdReadRegister(DataItemIds::REG_Read1, +0x01));
+    Message.addDataItem(read8);
+    cout << Message.AsString() << endl;
 
     TError res;
-    cout <<endl<< "TEST FromBytes() of above" << endl;
-    try
-    {
-        TBytes buf = Message.AsBytes();
-        TMessage aMsg = TMessage::FromBytes(buf, res);
-        cout << "aMsg created using TMessage::FromBytes()" << endl;
+    cout << "----------------------" << endl
+         << "TEST FromBytes() of above " << endl;
+    TMessage aMsg = TMessage::FromBytes(Message.AsBytes(), res);
 
-        TBytes buf2 = aMsg.AsBytes();
-        printf("buf2 from aMsg.AsBytes() = ");
-        for (auto byt : buf)
-            printf("%02hhX ", byt);
-        printf("\n");
+    cout << "res = " << (int)res << ", built aMsg without excepting" <<endl;
 
-        string str = aMsg.AsString();
-        cout << str << endl;
-        printf("passed because exception would've skipped this if it was going to fail.\n");
-    }
-    catch (logic_error e)
-    {
-        printf("!! Exception: %s\n", e.what());
-        printf("FAILED, FromBytes returned %d [%s]\n\n", res, err_msg[-res]);
-    }
-    catch (bad_alloc e)
-    {
-        printf("!! Exception: %s\n", e.what());
-        printf("FAILED, FromBytes returned %d [%s]\n\n", res, err_msg[-res]);
-    }
+    string str = aMsg.AsString();
+    cout << str << endl;
+
+
+    item->addData(7).addData(8);
+
+    cout << Message.AsString() << endl;
+    test(Message.AsBytes(), "TMessage(BRD_Reset(7,8) (should be ()))", ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH);
 
 #endif
     }catch (logic_error e){
         cout << endl
              << "!! Exception caught: " << e.what() << endl;
     }
-    cout << endl
-         << "WARNING: TMessage's Payload field is a vector of pointers to TDataItems.  I'm concerned about scope..." << endl;
+
     printf("\nDone.\n");
     return 0;
 }

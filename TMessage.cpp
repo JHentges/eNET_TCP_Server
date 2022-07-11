@@ -5,33 +5,34 @@
 using namespace std;
 
 const char *err_msg[] = {
-	/*  0 */ "VALID",
-	/* -1 */ "Message too short",
-	/* -2 */ "Checksum error",
-	/* -3 */ "Parse error",
-	/* -4 */ "Invalid Start symbol found",
-	/* -5 */ "Unknown Message ID",
-	/* -6 */ "Length mismatch",
-	/* -7 */ "DataItem length mismatch",
-	/* -8 */ "DataItem ID unknown",
-	/* -9 */ "DataItem too short",
+	/*   0 */ "VALID",
+	/*  -1 */ "Message too short",
+	/*  -2 */ "Checksum error",
+	/*  -3 */ "Parse error",
+	/*  -4 */ "Invalid Start symbol found",
+	/*  -5 */ "Unknown Message ID",
+	/*  -6 */ "Length mismatch",
+	/*  -7 */ "DataItem length mismatch",
+	/*  -8 */ "DataItem ID unknown",
+	/*  -9 */ "DataItem too short",
+	/* -10 */ "DataItem Payload error",
+	/* -11 */ "DId Offset Arg error",
+	/* -12 */ "DId Invalid",
 };
-
-#define hexbyte(x, w) "0x" << std::hex << setfill('0') << std::setw(w) << std::uppercase << static_cast<int>(x)
 
 const vector<TMessageId> ValidMessages{
 	'Q',
 	'R',
 	'C',
 };
-const vector<TDataId> ValidDataItemIDs{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0A, 0x0B};
+//const vector<TDataId> ValidDataItemIDs{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0A, 0x0B};
 
 int widthFromOffset(int ofs)
 {
 	int w = 0;
 	if (ofs < 0x18)
 		w = 8;
-	else if (ofs <= 0xDC)
+	else if ((ofs <= 0xDC) && (ofs % 4 == 0))
 		w = 32;
 	return w;
 }
@@ -58,18 +59,60 @@ int widthFromOffset(int ofs)
 // NOTE:
 //   This should be implemented OOP-style: each TDataItem ID should be a descendant-class that provides the
 //   specific validate and parse appropriate to that DataItemID
-int TDataItem::validateDataItemPayload(TDataId DataItemID, TBytes Data)
+int TDataItem::validateDataItemPayload(DataItemIds DId, TBytes Data)
 {
-	int result = ERR_SUCCESS;
+	int result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
+	int index = TDataItem::getDIdIndex(DId);
+	TDataItemLength len = Data.size();
+	// printf("validateDataItemPayload(%04X, ", DId);
+	// printBytes(cout, "", Data, 0);
+	// printf(") : %d <= %d <= %d\n", getMinLength(DId), len, getMaxLength(DId));
+	if ((TDataItem::getMinLength(DId) <= len) && (len <= TDataItem::getMaxLength(DId)))
+	{
+		result = ERR_SUCCESS;
+	}
+
 	return result;
 }
 
-int TDataItem::isValidDataItemID(TDataId DataItemID)
+int TDataItem::getDIdIndex(DataItemIds DId)
+{
+	int count = sizeof(DIdList) / sizeof(TDIdList);
+	for (int index = 0; index < count; index++)
+	{
+		if (DId == DIdList[index].DId)
+			return index;
+	}
+	throw exception();
+}
+
+// returns human-readable description of this TDataItem
+string TDataItem::getDIdDesc(DataItemIds DId)
+{
+	return string(DIdList[TDataItem::getDIdIndex(DId)].desc);
+}
+
+TDataItemLength TDataItem::getMinLength(DataItemIds DId)
+{
+	return DIdList[getDIdIndex(DId)].minLen;
+}
+
+TDataItemLength TDataItem::getTargetLength(DataItemIds DId)
+{
+	return DIdList[getDIdIndex(DId)].expectedLen;
+}
+
+TDataItemLength TDataItem::getMaxLength(DataItemIds DId)
+{
+	return DIdList[getDIdIndex(DId)].maxLen;
+}
+
+int TDataItem::isValidDataItemID(DataItemIds DataItemID)
 {
 	int result = false;
-	for (TDataId aValidId : ValidDataItemIDs)
+	for (auto aDIdEntry : DIdList)
 	{
-		if (DataItemID == aValidId)
+		if (DataItemID == aDIdEntry.DId)
 		{
 			result = true;
 			break;
@@ -86,7 +129,7 @@ int TDataItem::validateDataItem(TBytes msg)
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
 
 	TDataItemLength DataItemSize = head->dataLength; // WARN: only works if length field is one byte
-	TDataId Id = head->DId;
+	DataItemIds Id = head->DId;
 	if (!isValidDataItemID(Id))
 	{
 		return ERR_MSG_DATAITEM_ID_UNKNOWN;
@@ -103,46 +146,52 @@ int TDataItem::validateDataItem(TBytes msg)
 	return result;
 }
 
-shared_ptr<TDataItem> TDataItem::parseDataItem(TBytes msg, TError &result)
+// factory method
+PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 {
 	result = ERR_SUCCESS;
-	printf("parseDataItem received = ");
-	for (auto byt : msg)
-		printf("%02X ", byt);
-	printf("\n");
-	// if (! isValidDataItemId(Id))
-	// {
-	//     result = ERR_MSG_DATAITEM_ID_UNKNOWN;
-	//     return TDataItem();
-	// }
+	// printBytes(cout, "TDataItem::fromBytes received = ", msg, true);
 
-	if (msg.size() < DataItemHeaderSize) // todo: suck, fix
-		throw std::underflow_error("message");
+	GUARD((msg.size() >= sizeof(TDataItemHeader)), ERR_MSG_DATAITEM_TOO_SHORT, msg.size());
 
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
+	GUARD(isValidDataItemID(head->DId), ERR_DId_INVALID, head->DId);
+
 	TDataItemLength DataSize = head->dataLength; // MessageLength
 
-	shared_ptr<TDataItem> anItem;
+
+	PTDataItem anItem;
 	if (DataSize == 0)
-		return shared_ptr<TDataItem>(new TDataItem(head->DId)); // no data in this data item is valid
+		return PTDataItem(new TDataItem(head->DId)); // no data in this data item is valid
 	TBytes data;
 	data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
 
 	result = validateDataItemPayload(head->DId, data); // TODO: change to parseData that returns vector of classes-of-data-types
 	if (result != ERR_SUCCESS)
-		return shared_ptr<TDataItem>(new TDataItem());
+		return PTDataItem(new TDataItem());
 
-	printf("parseDataItem generated DId = %04X, data = ", head->DId);
-	for (auto byt : data)
-		printf("%02X ", byt);
-	printf("\n");
-	return shared_ptr<TDataItem>(new TDataItem(head->DId, data));
+	// TODO: replace this with an array of structs that hold each DId and its respective constructor or whatever,
+	//       so the switch() goes away and this .fromBytes() function doesn't need editing to add new DId's classes
+	// something like:
+	//	for(auto entry : DIdList)
+	//	{
+	//		if (entry->DId == head->DId)
+	//			return PTDataItem(new entry->DIdClass(head->DId, data));
+	//	 }
+	switch(head->DId){
+		case DataItemIds::REG_Read1:
+			return PTDataItem(new TDIdReadRegister(head->DId, data[0]));
+			break;
+		default:
+			break;
+		}
+	return PTDataItem(new TDataItem(head->DId, data));
 }
 #pragma endregion
 
-TDataItem::TDataItem() : TDataItem{0} {};
+TDataItem::TDataItem() : TDataItem{DataItemIds(_INVALID_DATAITEMID_)} {};
 
-TDataItem::TDataItem(TDataId DId)
+TDataItem::TDataItem(DataItemIds DId)
 {
 	this->setDId(DId);
 };
@@ -151,13 +200,13 @@ TDataItem::TDataItem(TDataId DId)
 TDataItem::TDataItem(TBytes bytes) : TDataItem()
 {
 	TError result = ERR_SUCCESS;
-	GUARD(bytes.size() < DataItemHeaderSize, ERR_MSG_DATAITEM_TOO_SHORT, bytes.size());
+	GUARD(bytes.size() < sizeof(TDataItemHeader), ERR_MSG_DATAITEM_TOO_SHORT, bytes.size());
 
 	TDataItemHeader *head = (TDataItemHeader *)bytes.data();
 	GUARD(isValidDataItemID(head->DId), ERR_MSG_DATAITEM_ID_UNKNOWN, head->DId);
 
 	TDataItemLength DataSize = head->dataLength; // TODO, FIX: only works whle TDataId is one byte; change to TDataItemHeader casting
-	GUARD(bytes.size() != DataItemHeaderSize + DataSize, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, DataSize);
+	GUARD(bytes.size() != sizeof(TDataItemHeader) + DataSize, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, DataSize);
 
 	this->Data = TBytes(bytes.begin() + sizeof(TDataItemHeader), bytes.end()); // extract the Data from the DataItem bytes
 	if (DataSize > 0)
@@ -165,14 +214,10 @@ TDataItem::TDataItem(TBytes bytes) : TDataItem()
 	return;
 }
 
-TDataItem::TDataItem(TDataId DId, TBytes bytes)
+TDataItem::TDataItem(DataItemIds DId, TBytes bytes)
 {
 	this->setDId(DId);
 	this->Data = bytes;
-	printf("TDataItem Constructor (%04hx, bytes) = ", DId);
-	for (auto byt : this->Data)
-		printf("%02X ", byt);
-	printf("\n");
 }
 
 TDataItem &TDataItem::addData(__u8 aByte)
@@ -181,16 +226,29 @@ TDataItem &TDataItem::addData(__u8 aByte)
 	return *this;
 }
 
-TDataItem &TDataItem::setDId(TDataId DId)
+TDataItem &TDataItem::setDId(DataItemIds DId)
 {
 	GUARD(isValidDataItemID(DId), ERR_MSG_DATAITEM_ID_UNKNOWN, DId);
 	this->Id = DId;
 	return *this;
 }
 
-TDataId TDataItem::getDId()
+DataItemIds TDataItem::getDId()
 {
 	return this->Id;
+}
+
+bool TDataItem::isValidDataLength()
+{
+	bool result = false;
+	DataItemIds DId = this->getDId();
+	int index = TDataItem::getDIdIndex(DId);
+	TDataItemLength len = this->Data.size();
+	if ((this->getMinLength(DId) <= len) && (this->getMaxLength(DId) >= len))
+	{
+		result = true;
+	}
+	return result;
 }
 
 TBytes TDataItem::AsBytes()
@@ -212,14 +270,22 @@ TBytes TDataItem::AsBytes()
 	return bytes;
 }
 
-/* sets dest to human readable string. */
+string TDataItem::getDIdDesc()
+{
+	return string(DIdList[TDataItem::getDIdIndex(this->getDId())].desc);
+}
 
+
+// returns human-readable, formatted (multi-line) string version of this TDataItem
 string TDataItem::AsString()
 {
 	stringstream dest;
 
-	dest << "DataItem = DId:" << setfill('0') << hex << uppercase << setw(sizeof(TDataId) * 2) << this->getDId()
-		 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ", ";
+	// dest << "DataItem = DId:" << setfill('0') << hex << uppercase << setw(sizeof(TDataId) * 2) << this->getDId()
+	// 	 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ", ";
+
+	dest << "DataItem = " << this->getDIdDesc() << ", ";
+
 	if (this->Data.size() != 0)
 	{
 		for (auto byt : this->Data)
@@ -229,51 +295,40 @@ string TDataItem::AsString()
 	}
 	return dest.str();
 }
-
 #pragma endregion TDataItem implementation
 
+#pragma region TDataItemNYI implementation
+// NYI (lol)
+#pragma endregion
+
 #pragma region DIdReadRegister
-TError DIdReadRegister::validateDataItemPayload(TDataId DataItemID, TBytes Data)
+TError TDIdReadRegister::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 {
 	TError result = ERR_SUCCESS;
 	if (Data.size() != 1)
 		return ERR_DId_BAD_PARAM;
 
 	int offset = Data[0];
-	switch (DataItemID)
-	{
-	case DIdRead8: // on eNET-AIO the only 8-bit registers are 0x00 through 0x17
-		if (offset > 0x17)
-			result = ERR_DId_BAD_OFFSET;
-		break;
+	int w = widthFromOffset(offset);
+	if (w != 0)
+		return ERR_DId_BAD_OFFSET;
 
-	case DIdRead16: // eNET-AIO has zero 16-bit registers
-		return ERR_DId_BAD_PARAM;
-		// if ((offset % 2) != 0)
-		// 	return ERR_DId_BAD_OFFSET;
-		break;
-
-	case DIdRead32: // eNET-AIO has 32-bit registers from 0x18 through 0xC0, but 0xA8->0xBC are undefined
-		if ((offset < 0x18) || (offset > 0xDC) || ((offset >= 0xA8) && (offset < 0xC0)))
-			return ERR_DId_BAD_OFFSET;
-		if ((offset % 4) != 0)
-			return ERR_DId_BAD_OFFSET;
-		break;
-	}
 	return result;
 };
 
-DIdReadRegister::DIdReadRegister(TDataId DId, int ofs)
+TDIdReadRegister::TDIdReadRegister(DataItemIds DId, int ofs)
 {
+	// printf("! DIAG: DId passed to TDIdReadRegister constructor was %04X, ofs=%02X\n", DId, ofs);
 	this->setDId(DId);
 	this->setOffset(ofs);
 }
 
-DIdReadRegister::DIdReadRegister(TBytes bytes)
+TDIdReadRegister::TDIdReadRegister(TBytes bytes)
 {
 	TDataItemHeader *head = (TDataItemHeader *)bytes.data();
 	TDataId DId = head->DId;
-	GUARD(((DId != DIdRead8) && (DId != DIdRead16) && (DId != DIdRead32)), ERR_DId_INVALID, DId);
+	// printf("! DIAG: DId passed to TDIdReadRegister constructor(TBytes) was %04X\n", DId);
+	GUARD(DId != DataItemIds::REG_Read1, ERR_DId_INVALID, DId);
 	TBytes data(bytes.cbegin() + sizeof(TDataItemHeader), bytes.cend());
 	TError result = ERR_SUCCESS;
 	GUARD(data.size() == 1, ERR_DId_BAD_PARAM, data.size());
@@ -283,17 +338,17 @@ DIdReadRegister::DIdReadRegister(TBytes bytes)
 	this->width = w;
 }
 
-DIdReadRegister &DIdReadRegister::setOffset(int ofs)
+TDIdReadRegister &TDIdReadRegister::setOffset(int ofs)
 {
 	int w = widthFromOffset(ofs);
 	if (w == 0)
-		throw logic_error("Invalid offset passed to DIdReadRegister::setOffset");
+		throw logic_error("Invalid offset passed to TDIdReadRegister::setOffset");
 	this->offset = ofs;
 	this->width = w;
 	return *this;
 }
 
-TBytes DIdReadRegister::AsBytes()
+TBytes TDIdReadRegister::AsBytes()
 {
 	TBytes bytes;
 	TDataId DId = this->getDId();
@@ -308,10 +363,10 @@ TBytes DIdReadRegister::AsBytes()
 	return bytes;
 }
 
-string DIdReadRegister::AsString()
+string TDIdReadRegister::AsString()
 {
 	stringstream dest;
-	dest << "DataItem = ReadRegister" << this->width << " from Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset);
+	dest << "DataItem = " << this->getDIdDesc() << " [" << this->width << " bit] from Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset);
 	return dest.str();
 }
 #pragma endregion
@@ -346,6 +401,7 @@ bool TMessage::isValidMessageID(TMessageId MessageId)
 // "A Message has an optional Payload, which is a sequence of zero or more Data Items"
 TError TMessage::validatePayload(TBytes Payload)
 {
+	printf("WARN: Does not work as expected when parsing multiple DataItems\n");
 	TError result = ERR_SUCCESS;
 	if (Payload.size() == 1) // one-byte Payload is the checksum byte.
 		return result;
@@ -413,18 +469,14 @@ TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return 
  * This function parses an array of bytes that is supposed to be a Payload
  * ...then returns a vector of those TDataItems and sets result to indicate error/success
  */
-vector<shared_ptr<TDataItem>> TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &result)
+TPayload TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &result)
 {
-	vector<shared_ptr<TDataItem>> dataItems; // an empty vector<>
+	TPayload dataItems; // an empty vector<>
 	result = ERR_SUCCESS;
 	if (payload_length == 0) // zero-length payload size is a valid payload
 		return dataItems;
 
 	TBytes DataItemBytes = Payload; // pointer to start of byte[] Payload
-	printf("parsePayload received = ");
-	for (auto byt : DataItemBytes)
-		printf("%02X ", byt);
-	printf("\n");
 	while (payload_length > sizeof(TDataItemHeader))
 	{
 		TDataItemHeader *head = (TDataItemHeader *)DataItemBytes.data();
@@ -435,13 +487,14 @@ vector<shared_ptr<TDataItem>> TMessage::parsePayload(TBytes Payload, __u32 paylo
 		if (DataItemLength > payload_length)
 		{
 			result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
-			cout << "DIAG::parseDataItem DataItemLength > payload_length returned error " << result << endl;
+			cout << "DIAG::fromBytes DataItemLength > payload_length returned error " << result << endl;
 			break;
 		}
-		shared_ptr<TDataItem> item = TDataItem::parseDataItem(DataItemBytes, result);
+
+		PTDataItem item = TDataItem::fromBytes(DataItemBytes, result);
 		if (result != ERR_SUCCESS)
 		{
-			cout << "DIAG::parseDataItem returned error " << result << endl;
+			cout << "DIAG::fromBytes returned error " << result << endl;
 			break;
 		}
 		dataItems.push_back(item);
@@ -456,15 +509,7 @@ vector<shared_ptr<TDataItem>> TMessage::parsePayload(TBytes Payload, __u32 paylo
 TMessage TMessage::FromBytes(TBytes buf, TError &result)
 {
 	result = ERR_SUCCESS;
-
-	printf("FromBytes received = ");
-	for (auto byt : buf)
-		printf("%02X ", byt);
-	printf("\n");
-
-	result = validateMessage(buf);
-	if (result != ERR_SUCCESS)
-		printf("DIAG::validateMessage failed with error %d\n", result);
+	// printBytes(cout, "TMessage::FromBytes received = ", buf, true);
 
 	auto siz = buf.size();
 	if (siz < minimumMessageLength)
@@ -488,19 +533,13 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 		return TMessage(result);
 	}
 
-	vector<std::shared_ptr<TDataItem>> dataItems;
+	TPayload dataItems;
 	if (head->payload_size > 0)
 	{
 		TBytes payload = buf;
 		payload.erase(payload.cbegin(), payload.cbegin() + sizeof(TMessageHeader));
-		printf("FromBytes generated a payload to parse of = ");
-		for (auto byt : payload)
-			printf("%02X ", byt);
-		printf("\n");
 		dataItems = parsePayload(payload, head->payload_size, result);
 	}
-
-	printf("FromBytes: payload parsed ... data items has %ld items\n", dataItems.size());
 
 	TCheckSum checksum = calculateChecksum(buf);
 	if (__valid_checksum__ != checksum)
@@ -520,7 +559,7 @@ TMessage::TMessage(TMessageId MId)
 	this->setMId(MId);
 }
 
-TMessage::TMessage(TMessageId MId, vector<std::shared_ptr<TDataItem>> Payload)
+TMessage::TMessage(TMessageId MId, TPayload Payload)
 {
 	this->setMId(MId);
 	for (auto one : Payload)
@@ -557,7 +596,7 @@ TMessage &TMessage::setMId(TMessageId ID)
 	return *this;
 }
 
-TMessage &TMessage::addDataItem(std::shared_ptr<TDataItem> item)
+TMessage &TMessage::addDataItem(PTDataItem item)
 {
 	this->DataItems.push_back(item);
 	return *this;
@@ -577,7 +616,7 @@ TBytes TMessage::AsBytes()
 	__u8 msb = (payloadLength >> 8) & 0xFF;
 	__u8 lsb = payloadLength & 0xFF;
 	bytes.push_back(this->Id); /// WARN: only works because TMessageID == __u8
-	printf("Message ID == %02X, payloadLength == %hd, LSB(PLen)=%hhd MSB=%hhd\n", Id, payloadLength, lsb, msb);
+	//printf("Message ID == %02X, payloadLength == %hd, LSB(PLen)=%hhd MSB=%hhd\n", Id, payloadLength, lsb, msb);
 	bytes.push_back(lsb);
 	bytes.push_back(msb);
 	for (auto item : this->DataItems)
@@ -608,7 +647,7 @@ string TMessage::AsString()
 	{
 		for (int itemNumber = 0; itemNumber < DataItems.size(); itemNumber++)
 		{
-			shared_ptr<TDataItem> item = this->DataItems[itemNumber];
+			PTDataItem item = this->DataItems[itemNumber];
 			dest << endl
 				 << "    " << item->AsString();
 		}
