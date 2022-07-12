@@ -1,12 +1,13 @@
 #include <ctime>
 #include <random>
 #include <iostream>
+#include <string>
 #include "eNET-types.h"
 #include "TMessage.h"
 
 using namespace std;
 
-//#define TEST_TMessage
+#define TEST_TMessage
 #define TEST_ParseMessage
 
 int test(TBytes Msg, const char *TestDescription, int expectedResult=ERR_SUCCESS)
@@ -52,25 +53,24 @@ int main(void) // "TEST"
     TMessageId MId_Q = 'Q';
     TMessage M1 = TMessage(MId_Q);
     cout << M1.AsString() << endl;
-
-    test(M1.AsBytes(), "buildMessage()");
+    test(M1.AsBytes(), "TMessage(Q)");
 
     TMessageId MId_R = 'R';
-    vector<TDataItem*> Payload;
-    TDataItem d2 = TDataItem(2);
-    Payload.push_back(&d2);
+    TPayload Payload;
+    PTDataItem d2 = unique_ptr<TDataItem>(new TDataItem((DataItemIds)0));
+    Payload.push_back(d2);
     TMessage M2 = TMessage(MId_R, Payload);
     cout << M2.AsString() << endl;
     test(M2.AsBytes(), "buildMessage() with Payload");
 
-    TDataId DId = 1;
-    TDataItem d1 = TDataItem(DId, M1.AsBytes());
-    Payload.push_back(&d1);
+    DataItemIds DId = (DataItemIds)0;
+    PTDataItem d1 = unique_ptr<TDataItem>(new TDataItem(DId, d2->AsBytes()));
+    Payload.push_back(d1);
     TMessage M3 = TMessage(MId_Q, Payload);
     cout << M3.AsString() << endl;
     test(M3.AsBytes(), "buildMessage() with two DataItems, one with Data");
 
-    M3.addDataItem(&d1).addDataItem(&d2);
+    M3.addDataItem(d1).addDataItem(d2);
     cout << M3.AsString() << endl;
     test(M3.AsBytes(), "addDataItem(TDataItem)");
 #endif
@@ -79,32 +79,30 @@ int main(void) // "TEST"
 #ifdef TEST_ParseMessage
     TMessageId MId_C = 'C';
     TMessage Message = TMessage(MId_C);
-
     PTDataItem item(new TDataItem(DataItemIds::BRD_Reset));
-
     Message.addDataItem(item);
+    cout << Message.AsString() << endl;
     test(Message.AsBytes(), "TMessage(BRD_Reset())", ERR_SUCCESS);
 
-    cout << "TEST addDataItem(TDIdReadRegister) with offset that's a 32-bit wide register " << endl;
+    cout << "TEST addDataItem(TDIdReadRegister) with offset +20 (that's a 32-bit wide register)" << endl;
     std::shared_ptr<TDIdReadRegister> read32(new TDIdReadRegister(DataItemIds::REG_Read1, 0x20));
     Message.addDataItem(read32);
     cout << Message.AsString() << endl;
 
     cout << "----------------------" << endl;
-    cout << "TEST addDataItem(TDIdReadRegister)" << endl;
+    cout << "TEST addDataItem(TDIdReadRegister) (from +1, 8-bit)" << endl;
     std::shared_ptr<TDIdReadRegister> read8(new TDIdReadRegister(DataItemIds::REG_Read1, +0x01));
     Message.addDataItem(read8);
     cout << Message.AsString() << endl;
 
     TError res;
     cout << "----------------------" << endl;
-    cout << "TEST FromBytes() of above " << endl;
+    cout << "TEST FromBytes() [serdes round-trip test] of above " << endl;
     TMessage aMsg = TMessage::FromBytes(Message.AsBytes(), res);
 
-    cout << "res = " << (int)res << ", built aMsg without excepting" <<endl;
-
-    string str = aMsg.AsString();
-    cout << str << endl;
+    cout << "res = " << (int)res << ", built aMsg without excepting" << endl
+         << "---- confirm the following text is identical to the prior:" << endl;
+    cout << aMsg.AsString() << endl;
 
     cout << "----------------------" << endl;
     item->addData(7).addData(8);

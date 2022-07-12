@@ -36,7 +36,6 @@ TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload(
 #include <iomanip>
 
 #include "eNET-types.h"
-using namespace std;
 
 #pragma region TError stuff
 #define _INVALID_MESSAGEID_ ((TMessageId)-1)
@@ -144,10 +143,10 @@ GUARD(	bool allGood, TError resultcode, int intInfo,
 		int Line = __builtin_LINE(), const char *File = __builtin_FILE(), const char *Func = __builtin_FUNCTION() )
 {
 	if (!(allGood))
-		throw logic_error(string(File)
-		 + ": " + string(Func)
-         + "(" + to_string(Line) + "): "
-         + string(err_msg[-(resultcode)]) + " = " + to_hex(intInfo));
+		throw std::logic_error(std::string(File)
+		 + ": " + std::string(Func)
+         + "(" + std::to_string(Line) + "): "
+         + std::string(err_msg[-(resultcode)]) + " = " + to_hex(intInfo));
 }
 
 // throw exception if conditional is false; "i" must be a defined TError
@@ -169,40 +168,50 @@ int widthFromOffset(int ofs);
 class TDataItem
 {
 public:
-	// NYI - validate the payload of a Data Item based on the Data Item ID
-	// e.g, if the Message is equivalent to ADC_SetRangeAll(__u8 ranges[16]) then the Data
-	//      should be 16 bytes, each of which is a valid Range Code
-	// e.g, if the Message is ADC_SetRange(__u16 Channel, __u8 RangeCode) then the Data
-	//      should be 3 bytes, being a __u16 Channel which must be valid for this device, and
-	//      a valid RangeCode byte
-	// NOTE:
-	//   This should be implemented OOP-style: each TDataItem ID should be a descendant-class that provides the
-	//   specific validate and parse appropriate to that DataItemID
 	static int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 	static int isValidDataItemID(DataItemIds DataItemID);
 	static int validateDataItem(TBytes msg);
+
 	static int getDIdIndex(DataItemIds DId);
-	static PTDataItem fromBytes(TBytes msg, TError &result);
-	static string getDIdDesc(DataItemIds DId);
+	static std::string getDIdDesc(DataItemIds DId);
 	static TDataItemLength getMinLength(DataItemIds DId);
 	static TDataItemLength getTargetLength(DataItemIds DId);
 	static TDataItemLength getMaxLength(DataItemIds DId);
 
-public:
+// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
+	static PTDataItem fromBytes(TBytes msg, TError &result);
+
+public:	// constructors; generally used while *initiating* a Message (i.e., a "Response"; from the service's perspective)
+	// zero-"Data" data item constructor
 	TDataItem(DataItemIds DId);
-	TDataItem(TBytes bytes);
+	// some-"Data" constructor for specific DId; *RARE*, *DEBUG mainly, to test round-trip conversion implementation*
 	TDataItem(DataItemIds DId, TBytes bytes);
+	// TODO: WARN: Why would this *ever* be used?
 	TDataItem();
+
+protected:
+	// parse byte array into TDataItem; *RARE*, *DEBUG mainly, to test round-trip conversion implementation*
+	TDataItem(TBytes bytes);
 
 public:
 	virtual TDataItem &addData(__u8 aByte);
 	virtual TDataItem &setDId(DataItemIds DId);
 	virtual DataItemIds getDId();
 	virtual bool isValidDataLength();
-	virtual TBytes AsBytes();
-	string getDIdDesc();
-	virtual string AsString();
 
+
+// TODO: consider operators <<, =, +=,
+	virtual TBytes AsBytes();
+	virtual std::string AsString();
+	virtual std::string getDIdDesc();
+
+// Verbs
+public:
+	virtual TDataItem &Go();
+	virtual TError getResultCode();
+	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
+
+protected:
 	TBytes Data;
 
 private:
@@ -230,7 +239,7 @@ public:
 public:
 	TDIdReadRegister & setOffset(int ofs);
 	virtual TBytes AsBytes();
-	virtual string AsString();
+	virtual std::string AsString();
 
 public:
 	int offset{0};
@@ -285,12 +294,15 @@ public:
 	TMessage(TMessageId MId);
 	TMessage(TMessageId MId,TPayload Payload);
 	TMessage(TBytes Msg);
+
+public:
 	TMessageId getMId();
 	TCheckSum getChecksum();
 	TMessage &setMId(TMessageId MId);
 	TMessage &addDataItem(PTDataItem item);
+
 	TBytes AsBytes();
-	string AsString();
+	std::string AsString();
 
 protected:
 	TMessageId Id;
@@ -308,7 +320,7 @@ typedef std::unique_ptr<TDataItem> DIdConstructor();
 
 typedef struct
 {
-	TDataId DId;
+	DataItemIds DId;
 	TDataItemLength minLen;
 	TDataItemLength expectedLen;
 	TDataItemLength maxLen;
@@ -319,7 +331,7 @@ typedef struct
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
 
 TDIdList const DIdList[] = {
-	{_INVALID_DATAITEMID_, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
+	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
 	{REG_Read1, 0, 1, 1, construct<TDIdReadRegister>, "REG_Read1(__u8 offset)"},

@@ -284,6 +284,24 @@ string TDataItem::AsString()
 	}
 	return dest.str();
 }
+
+#pragma region Verbs // TODO: fix; think this through
+TDataItem &TDataItem::Go()
+{
+	return *this;
+}
+
+TError TDataItem::getResultCode()
+{
+	return 0;
+}
+
+std::shared_ptr<void> TDataItem::getResultValue()
+{
+	return std::shared_ptr<void>(0);
+}
+
+#pragma endregion
 #pragma endregion TDataItem implementation
 
 #pragma region TDataItemNYI implementation
@@ -397,7 +415,7 @@ TError TMessage::validatePayload(TBytes Payload)
 {
 	// WARN: Does not seem to work as expected when parsing multiple DataItems
 	TError result = ERR_SUCCESS;
-	if (Payload.size() == 1) // one-byte Payload is the checksum byte.
+	if (Payload.size() == 1) // one-byte Payload is "the checksum byte".
 		return result;
 
 	if (Payload.size() == 0) // zero-length Payload size is a valid payload
@@ -432,6 +450,7 @@ TError TMessage::validatePayload(TBytes Payload)
 // returns 0 if Message is well-formed
 TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return error condition etc
 {
+	printBytes(cout, "RAW Message:", buf, 1);
 	if (buf.size() < minimumMessageLength)
 		return ERR_MSG_TOO_SHORT; // NAK(received insufficient data, yet) until more data (the rest of the Message/header) received?
 
@@ -450,7 +469,6 @@ TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return 
 		return ERR_MSG_CHECKSUM; // NAK(invalid checksum)
 
 	TBytes payload = buf;
-	payload.pop_back();
 	payload.erase(payload.cbegin(), payload.cbegin() + sizeof(TMessageHeader));
 
 	int validPayload = validatePayload(payload);
