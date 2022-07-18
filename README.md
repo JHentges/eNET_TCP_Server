@@ -84,6 +84,21 @@ The TDataItem's Data is a simple vector of bytes
 Derived classes' Data should reflect the parameters to the hypothetical API function the DId represents.
 * The TDataItem descendant to encapsulate DIO_Write1(bitIndex, bitLevel) would have a bitIndex field, and a bitLevel field; presumably a byte and bool, respectively.
 * The class encapsulating DIO_ReadConfigureWriteReadSome(bitConfigureMask, configureBits, bitWriteMask, writeBits) would have far more fields (hypothetically)
+* etc
+
+TDataItem::fromBytes() is a class factory that instantiates the correct derived class for the DId, as configured in the DIdList[] array defined in TMessage.cpp.
+Adding new DId classes requires changing or adding an entry in DIdList[].
+
+
+## Files / Descriptions
+TMessage.h / TMessage.cpp - declares / defines the class for Messages and DataItems, including all derived classes
+TError.h / TError.cpp - declares / defines the TError type and functions to operate on it.  NYI (current error handling is interim)
+eNET-types.h - declares/defines low-level types all modules should use; the primary goal is to promote cross-platform by jargon-rectification
+
+apci_ioctl.h/apcilib.cpp/apcilib.h/eNET-AIO.h - these files are from the apci-eNET fork of APCI and are intended to be included by reference; I don't know how to do that, so I just copied them into this repo for now
+
+test.cpp - a simple program I've been using to test the various functionality of the Protocol library; the source has evolved over time as the Protocol implementation moved from "C" to "C++" to "Classy C++", and will adapt again as we continue moving forward (to "Exceptional Classy", etc)
+
 
 
 
