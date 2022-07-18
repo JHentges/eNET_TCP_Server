@@ -1,7 +1,9 @@
 # eNET_TCP_Server
 ## Protocol 2.0 library for eNET- devices from ACCES.
 
-This library code is intended to be used by a TCP Listener, aioenetd, running on an Intel Sitara AM64x processor's Linux image (Ubuntu, buildroot, Yocto, whatever).
+This library code is intended to be used by a TCP Listener, aioenetd, running on an Intel Sitara AM64x processor's Linux image (Ubuntu, buildroot, Yocto, whatever).  As a secondary goal building this C++ Library into a .so or .dll for use from other OSes, including Windows, VxWorks, QNX, etc., consider portability concerns.
+
+The code requires C++17, and perhaps even C++20 (I can't recall; it is currently *built* in C++20 but I'm not certain the current implementation *requires* more than C++17; this source has been iterating often prior to initial release.)
 
 It provides a bridge between packets on Ethernet and FPGA-based DAQ resources on the eNET-device.
 
