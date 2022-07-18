@@ -1,6 +1,5 @@
 # eNET_TCP_Server
-# eNET_TCP_Server
-Protocol 2.0 library for eNET- devices from ACCES.
+## Protocol 2.0 library for eNET- devices from ACCES.
 
 This library code is intended to be used by a TCP Listener, aioenetd, running on an Intel Sitara AM64x processor's Linux image (Ubuntu, buildroot, Yocto, whatever).
 
@@ -27,9 +26,9 @@ Each DataItem consists of
 * a two-byte DId ("DataId", or "Data Type Identifier")
 * a one-byte Length Field, which is the number of bytes (between 0 and 255) in the DataItem's Data
 * zero or more bytes, up to 255, of DataItem Data
-
+```
 A Message is a sequence of bytes received by the TCP Server (across TCP/IP) in this format:
-	MLL_C
+ 	MLL_C
 where
 	M       is a Message ID# ("MId"), which may be mnemonic/logical
 	LL      is the Length of an optional payload
@@ -44,7 +43,7 @@ where
 	DD      is the Data ID# ("DId"), which identifies the *type* of data encapsulated in this data item
 	L       is the length of the data encapsulated in this data item (in bytes) (excluding L and Did)
 	_       is the Data Item's payload, or "the data"; `byte[L] Data`
-
+```
 Towards these goals this Protocol Library source provides serializers, deserializes, constructors, and validators for TMessages and TDataItems.
 * To deserialize, to validate and create a TMessage or TDataItem from a byte array use the .fromBytes() factory methods
 * To serialize, to convert TMessages and TDataItems into byte arrays use the .AsBytes() methods
@@ -78,6 +77,13 @@ PNP_ - Plug-and-Play stuff, device discovery, etc.
 CFG_ - Linux-side device-level configurations, protocol-selection, etc.
 SERVICE_ - technical support aids
 
+## Data Item Specifics
+The TDataItem class is a base class from which classes for each DId-specific functionality are derived.  
+
+The TDataItem's Data is a simple vector of bytes
+Derived classes' Data should reflect the parameters to the hypothetical API function the DId represents.
+* The TDataItem descendant to encapsulate DIO_Write1(bitIndex, bitLevel) would have a bitIndex field, and a bitLevel field; presumably a byte and bool, respectively.
+* The class encapsulating DIO_ReadConfigureWriteReadSome(bitConfigureMask, configureBits, bitWriteMask, writeBits) would have far more fields (hypothetically)
 
 
 
