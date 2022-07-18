@@ -21,7 +21,7 @@ Each Message consists of
 3 MId (Message IDs) are (currently) defined: 
 * 'Q', Query, a message from Client to Server asking for one or more DataItem(s)' values
 * 'C', Configure, a message from Client to Server to set the value of one or more DataItems' underlying truths (register value, Linux configuration objects, etc)
-* 'R', Response, a message from Server to Client to ACK, NACK, or provide fuller responses to 'C' or 'Q' Messages, as appropriate.
+* 'R', Response, a message from Server to Client to ACK, NAK, or provide fuller responses to 'C' or 'Q' Messages, as appropriate.
 
 The payload is defined as zero or more DataItems.
 Each DataItem consists of
