@@ -25,7 +25,7 @@ Each Message consists of
 
 The payload is defined as zero or more DataItems.
 Each DataItem consists of
-* a two-byte DId ("DataId", or "Data Type Identifier")
+* a two-byte DId ("DataId", or "Data Type Identifier").  DId are intended to provide unique identifiers for all plausible values one might ever want to query or control, from "a register" to "the revision of the Linux Kernel".
 * a one-byte Length Field, which is the number of bytes (between 0 and 255) in the DataItem's Data
 * zero or more bytes, up to 255, of DataItem Data
 ```
