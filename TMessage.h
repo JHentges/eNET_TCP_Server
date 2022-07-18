@@ -30,37 +30,18 @@ where
 TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload()'s comments below
 */
 #include <memory>
-#include <string>
 #include <iostream>
+#include <string>
 #include <sstream>
 #include <iomanip>
 
 #include "eNET-types.h"
+#include "TError.h"
 
-#pragma region TError stuff
-#define _INVALID_MESSAGEID_ ((TMessageId)-1)
-
-// TODO: Change the #defined errors, and the const char *err_msg[], to an error class/struct/array
-#define ERR_SUCCESS 0
-#define ERR_MSG_TOO_SHORT -1
-#define ERR_MSG_CHECKSUM -2
-#define ERR_MSG_PARSE -3
-#define ERR_MSG_START -4
-#define ERR_MSG_ID_UNKNOWN -5
-#define ERR_MSG_LEN_MISMATCH -6
-#define ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH -7
-#define ERR_MSG_DATAITEM_ID_UNKNOWN -8
-#define ERR_MSG_DATAITEM_TOO_SHORT -9
-
-#define ERR_DId_BAD_PARAM -10
-#define ERR_DId_BAD_OFFSET -11
-#define ERR_DId_INVALID -12
-
-extern const char *err_msg[];
+extern int apci; // global handle to device file for DAQ circuit on which to perform reads/writes
 
 #define __valid_checksum__ (TCheckSum)(0)
 #define minimumMessageLength (__u32)(sizeof(TMessageHeader) + sizeof(TCheckSum))
-#pragma endregion
 #pragma region utility functions / templates < >
 
 
@@ -138,7 +119,7 @@ std::string to_hex(T i)
 }
 
 // throw exception if conditional is false
-constexpr inline void
+inline void
 GUARD(	bool allGood, TError resultcode, int intInfo,
 		int Line = __builtin_LINE(), const char *File = __builtin_FILE(), const char *Func = __builtin_FUNCTION() )
 {
@@ -146,17 +127,8 @@ GUARD(	bool allGood, TError resultcode, int intInfo,
 		throw std::logic_error(std::string(File)
 		 + ": " + std::string(Func)
          + "(" + std::to_string(Line) + "): "
-         + std::string(err_msg[-(resultcode)]) + " = " + to_hex(intInfo));
+         + std::to_string(resultcode) + " = " + to_hex(intInfo));
 }
-
-// throw exception if conditional is false; "i" must be a defined TError
-// #define GUARD(allGood, resultCode, i) \
-// 		{ \
-// 			if (!(allGood)) \
-// 				throw logic_error(string(__FILE__) \
-//  					+ "(" + to_string(__LINE__) + "): " \
-// 					+ string(err_msg[-(resultCode)]) + " = " + to_hex((int)i));\
-// 		 }
 
 // return register width for given offset as defined for eNET-AIO registers
 // returns 0 if offset is invalid
@@ -213,6 +185,7 @@ public:
 
 protected:
 	TBytes Data;
+	TError result;
 
 private:
 	DataItemIds Id{0};
@@ -228,7 +201,11 @@ public:
 #pragma region class TDIdReadRegister : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
 class TDIdReadRegister : public TDataItem
 {
+// Verbs
 public:
+	virtual TDIdReadRegister &Go();
+	virtual TError getResultCode();
+	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
 public:
@@ -244,6 +221,9 @@ public:
 public:
 	int offset{0};
 	int width{0};
+
+private:
+	__u8 Value;
 };
 
 #pragma endregion
@@ -325,71 +305,8 @@ typedef struct
 	TDataItemLength expectedLen;
 	TDataItemLength maxLen;
 	DIdConstructor *Construct;
-	const char *desc;
+	std::string desc;
 } TDIdList;
 
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
-
-TDIdList const DIdList[] = {
-	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
-	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
-	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
-	{REG_Read1, 0, 1, 1, construct<TDIdReadRegister>, "REG_Read1(__u8 offset)"},
-	{REG_ReadAll, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadAll(void)"},
-	{REG_ReadSome, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadSome"},
-	{REG_ReadBuf, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadBuf"},
-	{REG_Write1, 2, 5, 5, construct<TDIdWriteRegister>, "REG_Write1(__u8 offset, auto value)"},
-	{REG_WriteSome, 0, 0, 0, construct<TDataItemNYI>, "REG_WriteSome"},
-	{REG_WriteBuf, 0, 0, 0, construct<TDataItemNYI>, "REG_WriteBuf"},
-	{REG_ClearBits, 2, 5, 5, construct<TDataItemNYI>, "REG_ClearBits(__u8 offset, auto bitMaskToClear)"},
-	{REG_SetBits, 2, 5, 5, construct<TDataItemNYI>, "Reg_SetBits(__u8 offset, auto bitMaskToSet)"},
-	{REG_ToggleBits, 2, 5, 5, construct<TDataItemNYI>, "Reg_ToggleBits(__u8 offset, auto bitMaskToToggle)"},
-
-	{DAC_, 0, 0, 0, construct<TDataItem>, "TDataItemBase (DAC_)"},
-	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(__u8 iDAC, single Volts)"},
-	DIdNYI(DAC_OutputAll),DIdNYI(DAC_OutputSome),
-	DIdNYI(DAC_Configure1),DIdNYI(DAC_ConfigureAll),DIdNYI(DAC_ConfigureSome),
-	DIdNYI(DAC_ConfigAndOutput1), DIdNYI(DAC_ConfigAndOutputAll), DIdNYI(DAC_ConfigAndOutputSome),
-	DIdNYI(DAC_ReadbackAll),
-
-	DIdNYI(DIO_),
-	DIdNYI(DIO_Configure1), DIdNYI(DIO_ConfigureAll), DIdNYI(DIO_ConfigureSome),
-	DIdNYI(DIO_Input1), DIdNYI(DIO_InputAll), DIdNYI(DIO_InputSome),
-	DIdNYI(DIO_InputBuf1), DIdNYI(DIO_InputBufAll), DIdNYI(DIO_InputBufSome), // repeated unpaced reads of Digital Inputs; NOTE: not sure this is useful
-	DIdNYI(DIO_Output1), DIdNYI(DIO_OutputAll), DIdNYI(DIO_OutputSome),
-	DIdNYI(DIO_OutputBuf),
-	DIdNYI(DIO_ConfigureReadWriteReadSome),
-	DIdNYI(DIO_Clear1), DIdNYI(DIO_ClearAll), DIdNYI(DIO_ClearSome),
-	DIdNYI(DIO_Set1), DIdNYI(DIO_SetAll), DIdNYI(DIO_SetSome),
-	DIdNYI(DIO_Toggle1), DIdNYI(DIO_ToggleAll), DIdNYI(DIO_ToggleSome),
-	DIdNYI(DIO_Pulse1), DIdNYI(DIO_PulseAll), DIdNYI(DIO_PulseSome),
-
-	DIdNYI(PWM_),
-	DIdNYI(PWM_Configure1), DIdNYI(PWM_ConfigureAll), DIdNYI(PWM_ConfigureSome),
-	DIdNYI(PWM_Input1), DIdNYI(PWM_InputAll), DIdNYI(PWM_InputSome),
-	DIdNYI(PWM_Output1), DIdNYI(PWM_OutputAll), DIdNYI(PWM_OutputSome),
-
-	DIdNYI(ADC_),
-	DIdNYI(ADC_ConfigurationOfEverything),
-	DIdNYI(ADC_Range1), DIdNYI(ADC_RangeAll), DIdNYI(ADC_RangeSome),
-	DIdNYI(ADC_Span1), DIdNYI(ADC_SpanAll), DIdNYI(ADC_SpanSome),
-	DIdNYI(ADC_Offset1), DIdNYI(ADC_OffsetAll), DIdNYI(ADC_OffsetSome),
-	DIdNYI(ADC_Calibration1), DIdNYI(ADC_CalibrationAll), DIdNYI(ADC_CalibrationSome),
-	DIdNYI(ADC_Volts1), DIdNYI(ADC_VoltsAll), DIdNYI(ADC_VoltsSome),
-	DIdNYI(ADC_Counts1), DIdNYI(ADC_CountsAll), DIdNYI(ADC_CountsSome),
-	DIdNYI(ADC_Raw1), DIdNYI(ADC_RawAll), DIdNYI(ADC_RawSome),
-
-	DIdNYI(ADC_Streaming_stuff_including_Hz_config),
-
-	DIdNYI(SCRIPT_Pause), // SCRIPT_Pause(__u8 delay ms)
-
-	DIdNYI(WDG_),
-	DIdNYI(DEF_),
-	DIdNYI(SERVICE_),
-	DIdNYI(TCP_),
-	DIdNYI(PNP_),
-	DIdNYI(CFG_),
-	// etc.  Need to list all the ones we care about soon, and all (of the ones we keep), eventually.
-	// TODO: return `NYI` for expected but not implemented DIds ... somehow.  C++ doesn't have introspection of enums ...
-	//		perhaps make a TDataItem derivative that is hard-coded NYI
-};
+extern TDIdList const DIdList[];

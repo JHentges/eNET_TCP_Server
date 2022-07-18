@@ -1,11 +1,5 @@
 #pragma once
 
-#include <string.h>
-#include <stdio.h>
-#include <memory>
-#include <vector>
-using std::vector, std::begin, std::end;
-
 #ifdef __linux__
 #include <linux/types.h>
 #else
@@ -13,6 +7,12 @@ typedef uint8_t __u8;
 typedef uint16_t __u16;
 typedef uint32_t __u32;
 #endif
+#include <string.h>
+#include <stdio.h>
+#include <memory>
+#include <vector>
+using std::vector, std::begin, std::end;
+
 
 /* type definitions */
 typedef vector<__u8> TBytes;
@@ -21,7 +21,6 @@ typedef __u16 TMessagePayloadSize;
 typedef __u8 TCheckSum;
 typedef __u16 TDataId;
 typedef __u8 TDataItemLength;
-typedef __u32 TError;
 
 class TDataItem;
 

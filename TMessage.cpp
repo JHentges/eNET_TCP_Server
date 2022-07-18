@@ -2,23 +2,12 @@
 #include <stdexcept>
 
 #include "TMessage.h"
-using namespace std;
+#include "TError.h"
 
-const char *err_msg[] = {
-	/*   0 */ "VALID",
-	/*  -1 */ "Message too short",
-	/*  -2 */ "Checksum error",
-	/*  -3 */ "Parse error",
-	/*  -4 */ "Invalid Start symbol found",
-	/*  -5 */ "Unknown Message ID",
-	/*  -6 */ "Length mismatch",
-	/*  -7 */ "DataItem length mismatch",
-	/*  -8 */ "DataItem ID unknown",
-	/*  -9 */ "DataItem too short",
-	/* -10 */ "DataItem Payload error",
-	/* -11 */ "DId Offset Arg error",
-	/* -12 */ "DId Invalid",
-};
+#include "apcilib.h"
+#include "eNET-AIO.h"
+
+using namespace std;
 
 const vector<TMessageId> ValidMessages{
 	'Q',
@@ -26,16 +15,135 @@ const vector<TMessageId> ValidMessages{
 	'C',
 };
 //const vector<TDataId> ValidDataItemIDs{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0A, 0x0B};
+//namespace eNET_AIO
+//{
+	int widthFromOffset(int ofs)
+	{
+		int w = 0;
+		if (ofs < 0x18)
+			w = 8;
+		else if ((ofs <= 0xDC) && (ofs % 4 == 0))
+			w = 32;
+		return w;
+	}
 
-int widthFromOffset(int ofs)
-{
-	int w = 0;
-	if (ofs < 0x18)
-		w = 8;
-	else if ((ofs <= 0xDC) && (ofs % 4 == 0))
-		w = 32;
-	return w;
-}
+	__u8 eNET_AIO_In8(__u8 Offset){
+		__u8 readValue;
+		apci_read8(apci, 0, BAR_REGISTER, Offset, &readValue);
+		return readValue;
+	};
+
+	__u32 eNET_AIO_In32(__u8 Offset){
+		__u32 readValue;
+		apci_read32(apci, 0, BAR_REGISTER, Offset, &readValue);
+		return readValue;
+	}
+//}
+
+TDIdList const DIdList[] = {
+	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
+	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
+	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
+	{REG_Read1, 0, 1, 1, construct<TDIdReadRegister>, "REG_Read1(__u8 offset)"},
+	{REG_ReadAll, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadAll(void)"},
+	{REG_ReadSome, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadSome"},
+	{REG_ReadBuf, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadBuf"},
+	{REG_Write1, 2, 5, 5, construct<TDIdWriteRegister>, "REG_Write1(__u8 offset, auto value)"},
+	{REG_WriteSome, 0, 0, 0, construct<TDataItemNYI>, "REG_WriteSome"},
+	{REG_WriteBuf, 0, 0, 0, construct<TDataItemNYI>, "REG_WriteBuf"},
+	{REG_ClearBits, 2, 5, 5, construct<TDataItemNYI>, "REG_ClearBits(__u8 offset, auto bitMaskToClear)"},
+	{REG_SetBits, 2, 5, 5, construct<TDataItemNYI>, "Reg_SetBits(__u8 offset, auto bitMaskToSet)"},
+	{REG_ToggleBits, 2, 5, 5, construct<TDataItemNYI>, "Reg_ToggleBits(__u8 offset, auto bitMaskToToggle)"},
+
+	{DAC_, 0, 0, 0, construct<TDataItem>, "TDataItemBase (DAC_)"},
+	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(__u8 iDAC, single Volts)"},
+	DIdNYI(DAC_OutputAll),
+	DIdNYI(DAC_OutputSome),
+	DIdNYI(DAC_Configure1),
+	DIdNYI(DAC_ConfigureAll),
+	DIdNYI(DAC_ConfigureSome),
+	DIdNYI(DAC_ConfigAndOutput1),
+	DIdNYI(DAC_ConfigAndOutputAll),
+	DIdNYI(DAC_ConfigAndOutputSome),
+	DIdNYI(DAC_ReadbackAll),
+
+	DIdNYI(DIO_),
+	DIdNYI(DIO_Configure1),
+	DIdNYI(DIO_ConfigureAll),
+	DIdNYI(DIO_ConfigureSome),
+	DIdNYI(DIO_Input1),
+	DIdNYI(DIO_InputAll),
+	DIdNYI(DIO_InputSome),
+	DIdNYI(DIO_InputBuf1),
+	DIdNYI(DIO_InputBufAll),
+	DIdNYI(DIO_InputBufSome), // repeated unpaced reads of Digital Inputs; NOTE: not sure this is useful
+	DIdNYI(DIO_Output1),
+	DIdNYI(DIO_OutputAll),
+	DIdNYI(DIO_OutputSome),
+	DIdNYI(DIO_OutputBuf),
+	DIdNYI(DIO_ConfigureReadWriteReadSome),
+	DIdNYI(DIO_Clear1),
+	DIdNYI(DIO_ClearAll),
+	DIdNYI(DIO_ClearSome),
+	DIdNYI(DIO_Set1),
+	DIdNYI(DIO_SetAll),
+	DIdNYI(DIO_SetSome),
+	DIdNYI(DIO_Toggle1),
+	DIdNYI(DIO_ToggleAll),
+	DIdNYI(DIO_ToggleSome),
+	DIdNYI(DIO_Pulse1),
+	DIdNYI(DIO_PulseAll),
+	DIdNYI(DIO_PulseSome),
+
+	DIdNYI(PWM_),
+	DIdNYI(PWM_Configure1),
+	DIdNYI(PWM_ConfigureAll),
+	DIdNYI(PWM_ConfigureSome),
+	DIdNYI(PWM_Input1),
+	DIdNYI(PWM_InputAll),
+	DIdNYI(PWM_InputSome),
+	DIdNYI(PWM_Output1),
+	DIdNYI(PWM_OutputAll),
+	DIdNYI(PWM_OutputSome),
+
+	DIdNYI(ADC_),
+	DIdNYI(ADC_ConfigurationOfEverything),
+	DIdNYI(ADC_Range1),
+	DIdNYI(ADC_RangeAll),
+	DIdNYI(ADC_RangeSome),
+	DIdNYI(ADC_Span1),
+	DIdNYI(ADC_SpanAll),
+	DIdNYI(ADC_SpanSome),
+	DIdNYI(ADC_Offset1),
+	DIdNYI(ADC_OffsetAll),
+	DIdNYI(ADC_OffsetSome),
+	DIdNYI(ADC_Calibration1),
+	DIdNYI(ADC_CalibrationAll),
+	DIdNYI(ADC_CalibrationSome),
+	DIdNYI(ADC_Volts1),
+	DIdNYI(ADC_VoltsAll),
+	DIdNYI(ADC_VoltsSome),
+	DIdNYI(ADC_Counts1),
+	DIdNYI(ADC_CountsAll),
+	DIdNYI(ADC_CountsSome),
+	DIdNYI(ADC_Raw1),
+	DIdNYI(ADC_RawAll),
+	DIdNYI(ADC_RawSome),
+
+	DIdNYI(ADC_Streaming_stuff_including_Hz_config),
+
+	DIdNYI(SCRIPT_Pause), // SCRIPT_Pause(__u8 delay ms)
+
+	DIdNYI(WDG_),
+	DIdNYI(DEF_),
+	DIdNYI(SERVICE_),
+	DIdNYI(TCP_),
+	DIdNYI(PNP_),
+	DIdNYI(CFG_),
+	// etc.  Need to list all the ones we care about soon, and all (of the ones we keep), eventually.
+	// TODO: return `NYI` for expected but not implemented DIds ... somehow.  C++ doesn't have introspection of enums ...
+	//		perhaps make a TDataItem derivative that is hard-coded NYI
+};
 
 #pragma region TDataItem implementation
 /*	TDataItem
@@ -285,9 +393,10 @@ string TDataItem::AsString()
 	return dest.str();
 }
 
-#pragma region Verbs // TODO: fix; think this through
+#pragma region Verbs -------------------------------------- // TODO: fix; think this through
 TDataItem &TDataItem::Go()
 {
+	this->result = ERR_NYI;
 	return *this;
 }
 
@@ -308,7 +417,25 @@ std::shared_ptr<void> TDataItem::getResultValue()
 // NYI (lol)
 #pragma endregion
 
-#pragma region DIdReadRegister
+#pragma region TDIdReadRegister
+
+
+TDIdReadRegister &TDIdReadRegister::Go()
+{
+	this->result = ERR_NYI;
+	return *this;
+}
+
+TError TDIdReadRegister::getResultCode()
+{
+	return this->result;
+}
+
+std::shared_ptr<void> TDIdReadRegister::getResultValue()
+{
+	return std::shared_ptr<__u32>(new __u32(this->Value));
+}
+
 TError TDIdReadRegister::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 {
 	TError result = ERR_SUCCESS;
@@ -471,7 +598,7 @@ TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return 
 	TBytes payload = buf;
 	payload.erase(payload.cbegin(), payload.cbegin() + sizeof(TMessageHeader));
 
-	int validPayload = validatePayload(payload);
+	TError validPayload = validatePayload(payload);
 	if (validPayload != 0)
 		return validPayload;
 
@@ -499,14 +626,14 @@ TPayload TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &re
 		if (DataItemLength > payload_length)
 		{
 			result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
-			cout << "DIAG::fromBytes DataItemLength > payload_length returned error " << result << endl;
+			cout << "DIAG::fromBytes DataItemLength > payload_length returned error " << result << ", " << result << endl;
 			break;
 		}
 
 		PTDataItem item = TDataItem::fromBytes(DataItemBytes, result);
 		if (result != ERR_SUCCESS)
 		{
-			cout << "DIAG::fromBytes returned error " << result << endl;
+			cout << "DIAG::fromBytes returned error " << result << ", " << result << endl;
 			break;
 		}
 		dataItems.push_back(item);
@@ -536,13 +663,13 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 	{
 		cout << "FromBytes() detected invalid MId: " << head->type << endl;
 		result = ERR_MSG_ID_UNKNOWN; // NAK(invalid MessageID Category byte)
-		return TMessage(result);
+		return TMessage();
 	}
 	__u32 statedMessageLength = minimumMessageLength + head->payload_size;
 	if (siz < statedMessageLength)
 	{
 		result = ERR_MSG_LEN_MISMATCH; // NAK(received insufficient data, yet) until more data
-		return TMessage(result);
+		return TMessage();
 	}
 
 	TPayload dataItems;
@@ -558,7 +685,7 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 	{
 		result = ERR_MSG_CHECKSUM; // NAK(invalid checksum)
 		printf("FromBytes: invalid checksum\n");
-		return TMessage(result);
+		return TMessage();
 	}
 
 	TMessage message = TMessage(head->type, dataItems);
@@ -602,7 +729,7 @@ TCheckSum TMessage::getChecksum()
 TMessage &TMessage::setMId(TMessageId ID)
 {
 	if (!isValidMessageID(ID))
-		throw logic_error(err_msg[-ERR_MSG_ID_UNKNOWN]);
+		throw logic_error("ERR_MSG_ID_UNKNOWN"); // TODO: FIX using TError
 	this->Id = ID;
 
 	return *this;
@@ -675,3 +802,5 @@ string TMessage::AsString()
 }
 
 #pragma endregion
+
+

@@ -4,20 +4,17 @@
 #include <string>
 #include "eNET-types.h"
 #include "TMessage.h"
-
+int apci;
 using namespace std;
 
-#define TEST_TMessage
-#define TEST_ParseMessage
-
-int test(TBytes Msg, const char *TestDescription, int expectedResult=ERR_SUCCESS)
+TError test(TBytes Msg, const char *TestDescription, TError expectedResult=ERR_SUCCESS)
 {
 
     printf("TEST %s", TestDescription);
     if (expectedResult != ERR_SUCCESS)
         printf(" (testing error code %d, %s), ", expectedResult, err_msg[-expectedResult]);
     printf("\n");
-    int result = 0;
+    TError result;
     try
     {
         result = TMessage::validateMessage(Msg);
@@ -25,31 +22,27 @@ int test(TBytes Msg, const char *TestDescription, int expectedResult=ERR_SUCCESS
             printf("FAIL: result (%d, %s) is not expected result (%d, %s)\n",
                 result, err_msg[-result], expectedResult, err_msg[-expectedResult]);
         else
-            printf("PASS: result is as expected [%d, %s]\n", result, err_msg[-result]);
+            printf("PASS: result is as expected [%d, %s]\n", result,err_msg[-result]);
     }
     catch (logic_error e)
     {
         cout << endl
              << "Exception caught: " << e.what() << endl
-             << "if the exception is " << err_msg[-expectedResult] << " then this is PASS" << endl;
+             << "if the exception is " << expectedResult << " then this is PASS" << endl;
     }
     printf("----------------------\n");
     return result;
 }
 
+
 int main(void) // "TEST"
 {
     try{
-#if defined(TEST_TMessage)
+
     __u16 len;
     printf("Testing ");
-#ifdef TEST_TMessage
-    printf("TMessage validates");
-#endif
-#endif
     printf("\n-----------------------------------\n");
 
-#ifdef TEST_TMessage
     TMessageId MId_Q = 'Q';
     TMessage M1 = TMessage(MId_Q);
     cout << M1.AsString() << endl;
@@ -73,10 +66,7 @@ int main(void) // "TEST"
     M3.addDataItem(d1).addDataItem(d2);
     cout << M3.AsString() << endl;
     test(M3.AsBytes(), "addDataItem(TDataItem)");
-#endif
 
-
-#ifdef TEST_ParseMessage
     TMessageId MId_C = 'C';
     TMessage Message = TMessage(MId_C);
     PTDataItem item(new TDataItem(DataItemIds::BRD_Reset));
@@ -100,7 +90,7 @@ int main(void) // "TEST"
     cout << "TEST FromBytes() [serdes round-trip test] of above " << endl;
     TMessage aMsg = TMessage::FromBytes(Message.AsBytes(), res);
 
-    cout << "res = " << (int)res << ", built aMsg without excepting" << endl
+    cout << "res = " << res << res << ", built aMsg without excepting" << endl
          << "---- confirm the following text is identical to the prior:" << endl;
     cout << aMsg.AsString() << endl;
 
@@ -110,7 +100,6 @@ int main(void) // "TEST"
     cout << Message.AsString() << endl;
     test(Message.AsBytes(), "TMessage(BRD_Reset(7,8) (should be (void)))", ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH);
 
-#endif
     }catch (logic_error e){
         cout << endl
              << "!! Exception caught: " << e.what() << endl;
