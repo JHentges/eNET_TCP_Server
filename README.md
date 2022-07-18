@@ -23,7 +23,7 @@ Each Message consists of
 * 'C', Configure, a message from Client to Server to set the value of one or more DataItems' underlying truths (register value, Linux configuration objects, etc)
 * 'R', Response, a message from Server to Client to ACK, NACK, or provide fuller responses to 'C' or 'Q' Messages, as appropriate.
 
-The payload is defined as zero, or one or more, DataItems.
+The payload is defined as zero or more DataItems.
 Each DataItem consists of
 * a two-byte DId ("DataId", or "Data Type Identifier")
 * a one-byte Length Field, which is the number of bytes (between 0 and 255) in the DataItem's Data
