@@ -134,13 +134,21 @@ GUARD(	bool allGood, TError resultcode, int intInfo,
 // returns 0 if offset is invalid
 int widthFromOffset(int ofs);
 #pragma endregion utility functions and templates
+/*	The following classes (TDataItem and its descendants) try to use a consistent convention
+	for the order Methods are listed
+
+	1) Deserialization stuff, used while converting bytes (received via TCP) into Objects
+	2) Serialization stuff, used to construct and convert Objects into byte vectors (for sending over TCP)
+	3) Verbs: stuff associated with using Objects as Actions, and the results thereof
+	4) diagnostic, debug, or otherwise "Rare" stuff, like .AsString()
+*/
 #pragma region class TDataItem declaration
 
 // Base class for all TDataItems, descendants of which will handle payloads specific to the DId
 class TDataItem
 {
 public:
-// methods used when converting byte vectors into objects
+// 1) Deserialization: methods used when converting byte vectors into objects
 
 	// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
 	// .fromBytes() would typically be called by TMessage::fromBytes();
@@ -160,9 +168,7 @@ public:
 	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
 	virtual TBytes AsBytes();
 
-
-
-// methods for source to generate TDataItems, typically for "Response Messages"
+// 2) Serialization: methods for source to generate TDataItems, typically for "Response Messages"
 
 	// zero-"Data" data item constructor
 	TDataItem(DataItemIds DId);
@@ -187,9 +193,8 @@ public:
 	// this is an explicit class-specific .fromBytes(), which the class method .fromBytes() will invoke for NYI DIds etc
 	TDataItem(TBytes bytes);
 
-
-// Verbs -- things used when *executing* the TDataItem Object
-
+// 3) Verbs -- things used when *executing* the TDataItem Object
+public:
 	// intended to be overriden by descendants it performs the query/config operation and sets instance state as appropriate
 	virtual TDataItem &Go();
 	// encapsulates the result code of .Go()'s operation
@@ -199,8 +204,8 @@ public:
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 
 
-// Diagnostic / Debug - methods typically used for implementation debugging
-
+// 4) Diagnostic / Debug - methods typically used for implementation debugging
+public:
 	// returns human-readable string representing the DataItem and its payload; normally used by TMessage.AsString()
 	virtual std::string AsString();
 	// used by .AsString() to fetch the human-readable name/description of the DId (from DIdList[].Description)
@@ -226,21 +231,27 @@ public:
 #pragma region class TDIdReadRegister : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
 class TDIdReadRegister : public TDataItem
 {
-// Verbs
+// 1) Deserialization
+public:
+	// called by TDataItem::fromBytes() via DIdList association with DId
+	TDIdReadRegister(TBytes bytes);
+
+// 2) Serialization: For creating Objects to be turned into bytes
+public:
+	// constructor of choice for source; all parameters included. TODO: ? make overloadable
+	TDIdReadRegister(DataItemIds DId, int ofs);
+	TDIdReadRegister() = default;
+	virtual TBytes AsBytes();
+	TDIdReadRegister & setOffset(int ofs);
+
+// 3) Verbs
 public:
 	virtual TDIdReadRegister &Go();
 	virtual TError getResultCode();
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
-public:
-	TDIdReadRegister() = default;
-	TDIdReadRegister(DataItemIds DId, int ofs);
-	TDIdReadRegister(TBytes bytes);
-
-public:
-	TDIdReadRegister & setOffset(int ofs);
-	virtual TBytes AsBytes();
+// 4) Diagnostic
 	virtual std::string AsString();
 
 public:
@@ -265,6 +276,9 @@ class TDIdDacOutput : public TDataItem
 	public:
 };
 #pragma endregion
+
+
+
 #pragma region class TMessage declaration
 class TMessage
 {
