@@ -140,48 +140,73 @@ int widthFromOffset(int ofs);
 class TDataItem
 {
 public:
+// methods used when converting byte vectors into objects
+
+	// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
+	// .fromBytes() would typically be called by TMessage::fromBytes();
+	static PTDataItem fromBytes(TBytes msg, TError &result);
+
+	// this block of methods are typically used by ::fromBytes() to syntax-check the byte vector
 	static int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 	static int isValidDataItemID(DataItemIds DataItemID);
 	static int validateDataItem(TBytes msg);
-
-	static int getDIdIndex(DataItemIds DId);
-	static std::string getDIdDesc(DataItemIds DId);
 	static TDataItemLength getMinLength(DataItemIds DId);
 	static TDataItemLength getTargetLength(DataItemIds DId);
 	static TDataItemLength getMaxLength(DataItemIds DId);
 
-// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
-	static PTDataItem fromBytes(TBytes msg, TError &result);
+	// index into DIdList; TODO: kinda belongs in a DIdList class method...
+	static int getDIdIndex(DataItemIds DId);
 
-public:	// constructors; generally used while *initiating* a Message (i.e., a "Response"; from the service's perspective)
+	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
+	virtual TBytes AsBytes();
+
+
+
+// methods for source to generate TDataItems, typically for "Response Messages"
+
 	// zero-"Data" data item constructor
 	TDataItem(DataItemIds DId);
 	// some-"Data" constructor for specific DId; *RARE*, *DEBUG mainly, to test round-trip conversion implementation*
+	// any DId that is supposed to have data would use its own constructor that takes the correct data types, not a
+	// simple TBytes, for the Data Payload
 	TDataItem(DataItemIds DId, TBytes bytes);
+
 	// TODO: WARN: Why would this *ever* be used?
 	TDataItem();
 
-protected:
-	// parse byte array into TDataItem; *RARE*, *DEBUG mainly, to test round-trip conversion implementation*
-	TDataItem(TBytes bytes);
-
-public:
+	// TDataItem anItem(DId_Read1).addData(offset) kind of thing.  no idea if it will be useful other than debugging
 	virtual TDataItem &addData(__u8 aByte);
+	// TDataItem anItem().setDId(DId_Read1) kind of thing.  no idea why it exists
 	virtual TDataItem &setDId(DataItemIds DId);
+	// encapsulates reading the Id for the DataItem
 	virtual DataItemIds getDId();
+
 	virtual bool isValidDataLength();
 
+	// parse byte array into TDataItem; *RARE*, *DEBUG mainly, to test round-trip conversion implementation*
+	// this is an explicit class-specific .fromBytes(), which the class method .fromBytes() will invoke for NYI DIds etc
+	TDataItem(TBytes bytes);
 
-// TODO: consider operators <<, =, +=,
-	virtual TBytes AsBytes();
-	virtual std::string AsString();
-	virtual std::string getDIdDesc();
 
-// Verbs
-public:
+// Verbs -- things used when *executing* the TDataItem Object
+
+	// intended to be overriden by descendants it performs the query/config operation and sets instance state as appropriate
 	virtual TDataItem &Go();
+	// encapsulates the result code of .Go()'s operation
 	virtual TError getResultCode();
+	// encapsulates the Value that results from .Go()'s operation; DIO_Read1() might have a bool Value;
+	// ADC_GetImmediateScanV() might be an array of single precision floating point Volts
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
+
+
+// Diagnostic / Debug - methods typically used for implementation debugging
+
+	// returns human-readable string representing the DataItem and its payload; normally used by TMessage.AsString()
+	virtual std::string AsString();
+	// used by .AsString() to fetch the human-readable name/description of the DId (from DIdList[].Description)
+	virtual std::string getDIdDesc();
+	// class method to get the human-readable name/description of any known DId; TODO: should maybe be a method of DIdList[]
+	static std::string getDIdDesc(DataItemIds DId);
 
 protected:
 	TBytes Data;
