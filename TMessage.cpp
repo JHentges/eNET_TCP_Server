@@ -14,46 +14,44 @@ const vector<TMessageId> ValidMessages{
 	'R',
 	'C',
 };
-//const vector<TDataId> ValidDataItemIDs{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0A, 0x0B};
-//namespace eNET_AIO
-//{
-	int widthFromOffset(int ofs)
-	{
-		int w = 0;
-		if (ofs < 0x18)
-			w = 8;
-		else if ((ofs <= 0xDC) && (ofs % 4 == 0))
-			w = 32;
-		return w;
-	}
 
-	__u8 eNET_AIO_In8(__u8 Offset){
-		__u8 readValue;
-		apci_read8(apci, 0, BAR_REGISTER, Offset, &readValue);
-		return readValue;
-	};
+int widthFromOffset(int ofs)
+{
+	int w = 0;
+	if (ofs < 0x18)
+		w = 8;
+	else if ((ofs <= 0xDC) && (ofs % 4 == 0))
+		w = 32;
+	return w;
+}
 
-	__u32 eNET_AIO_In32(__u8 Offset){
-		__u32 readValue;
-		apci_read32(apci, 0, BAR_REGISTER, Offset, &readValue);
-		return readValue;
-	}
-//}
+__u8 eNET_AIO_In8(__u8 Offset){
+	__u8 readValue;
+	apci_read8(apci, 0, BAR_REGISTER, Offset, &readValue);
+	return readValue;
+};
 
+__u32 eNET_AIO_In32(__u8 Offset){
+	__u32 readValue;
+	apci_read32(apci, 0, BAR_REGISTER, Offset, &readValue);
+	return readValue;
+}
+
+// DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
 TDIdList const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
 	{REG_Read1, 0, 1, 1, construct<TDIdReadRegister>, "REG_Read1(__u8 offset)"},
-	{REG_ReadAll, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadAll(void)"},
-	{REG_ReadSome, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadSome"},
-	{REG_ReadBuf, 0, 0, 0, construct<TDataItemNYI>, "REG_ReadBuf"},
-	{REG_Write1, 2, 5, 5, construct<TDIdWriteRegister>, "REG_Write1(__u8 offset, auto value)"},
-	{REG_WriteSome, 0, 0, 0, construct<TDataItemNYI>, "REG_WriteSome"},
-	{REG_WriteBuf, 0, 0, 0, construct<TDataItemNYI>, "REG_WriteBuf"},
-	{REG_ClearBits, 2, 5, 5, construct<TDataItemNYI>, "REG_ClearBits(__u8 offset, auto bitMaskToClear)"},
-	{REG_SetBits, 2, 5, 5, construct<TDataItemNYI>, "Reg_SetBits(__u8 offset, auto bitMaskToSet)"},
-	{REG_ToggleBits, 2, 5, 5, construct<TDataItemNYI>, "Reg_ToggleBits(__u8 offset, auto bitMaskToToggle)"},
+	DIdNYI(REG_ReadAll),
+	DIdNYI(REG_ReadSome),
+	DIdNYI(REG_ReadBuf),
+	DIdNYI(REG_Write1),
+	DIdNYI(REG_WriteSome),
+	DIdNYI(REG_WriteBuf),
+	DIdNYI(REG_ClearBits),
+	DIdNYI(REG_SetBits),
+	DIdNYI(REG_ToggleBits),
 
 	{DAC_, 0, 0, 0, construct<TDataItem>, "TDataItemBase (DAC_)"},
 	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(__u8 iDAC, single Volts)"},
