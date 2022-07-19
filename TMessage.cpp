@@ -38,7 +38,7 @@ __u32 eNET_AIO_In32(__u8 Offset){
 }
 
 // DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
-TDIdList const DIdList[] = {
+TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
@@ -183,7 +183,7 @@ int TDataItem::validateDataItemPayload(DataItemIds DId, TBytes Data)
 
 int TDataItem::getDIdIndex(DataItemIds DId)
 {
-	int count = sizeof(DIdList) / sizeof(TDIdList);
+	int count = sizeof(DIdList) / sizeof(TDIdListEntry);
 	for (int index = 0; index < count; index++)
 	{
 		if (DId == DIdList[index].DId)

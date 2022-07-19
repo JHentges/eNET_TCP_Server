@@ -345,7 +345,7 @@ typedef struct
 	TDataItemLength maxLen;
 	DIdConstructor *Construct;
 	std::string desc;
-} TDIdList;
+} TDIdListEntry;
 
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
-extern TDIdList const DIdList[];
+extern TDIdListEntry const DIdList[];
