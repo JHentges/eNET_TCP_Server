@@ -25,28 +25,16 @@ int widthFromOffset(int ofs)
 	return w;
 }
 
-__u8 eNET_AIO_In8(__u8 Offset){
-	__u8 readValue;
-	apci_read8(apci, 0, BAR_REGISTER, Offset, &readValue);
-	return readValue;
-};
-
-__u32 eNET_AIO_In32(__u8 Offset){
-	__u32 readValue;
-	apci_read32(apci, 0, BAR_REGISTER, Offset, &readValue);
-	return readValue;
-}
-
 // DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
 TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
-	{REG_Read1, 0, 1, 1, construct<TDIdReadRegister>, "REG_Read1(__u8 offset)"},
+	{REG_Read1, 1, 1, 1, construct<TREG_Read1>, "[__u8 or __u32] REG_Read1(__u8 offset)"},
 	DIdNYI(REG_ReadAll),
 	DIdNYI(REG_ReadSome),
 	DIdNYI(REG_ReadBuf),
-	DIdNYI(REG_Write1),
+	{REG_Write1, 2, 5, 5, construct<TDIdWriteRegister>, "REG_Write1(__u8 offset, [__u8 or __u32] value)"},
 	DIdNYI(REG_WriteSome),
 	DIdNYI(REG_WriteBuf),
 	DIdNYI(REG_ClearBits),
@@ -265,7 +253,6 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 
 	TDataItemLength DataSize = head->dataLength; // MessageLength
 
-
 	PTDataItem anItem;
 	if (DataSize == 0)
 		return PTDataItem(new TDataItem(head->DId)); // no data in this data item is valid
@@ -276,7 +263,7 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 	if (result != ERR_SUCCESS)
 		return PTDataItem(new TDataItem());
 
-	for(auto entry : DIdList)
+	for (auto entry : DIdList)
 		if (entry.DId == head->DId)
 			return entry.Construct();
 
@@ -300,7 +287,7 @@ TDataItem::TDataItem(TBytes bytes) : TDataItem()
 	TDataItemHeader *head = (TDataItemHeader *)bytes.data();
 	GUARD(isValidDataItemID(head->DId), ERR_MSG_DATAITEM_ID_UNKNOWN, head->DId);
 
-	TDataItemLength DataSize = head->dataLength; // TODO, FIX: only works whle TDataId is one byte; change to TDataItemHeader casting
+	TDataItemLength DataSize = head->dataLength;
 	GUARD(bytes.size() != sizeof(TDataItemHeader) + DataSize, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, DataSize);
 
 	this->Data = TBytes(bytes.begin() + sizeof(TDataItemHeader), bytes.end()); // extract the Data from the DataItem bytes
@@ -370,7 +357,6 @@ string TDataItem::getDIdDesc()
 	return string(DIdList[TDataItem::getDIdIndex(this->getDId())].desc);
 }
 
-
 // returns human-readable, formatted (multi-line) string version of this TDataItem
 string TDataItem::AsString()
 {
@@ -391,10 +377,10 @@ string TDataItem::AsString()
 	return dest.str();
 }
 
-#pragma region Verbs -------------------------------------- // TODO: fix; think this through
+#pragma region Verbs-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- // TODO: fix; think this through
 TDataItem &TDataItem::Go()
 {
-	this->result = ERR_NYI;
+	this->resultCode = ERR_NYI;
 	return *this;
 }
 
@@ -417,24 +403,37 @@ std::shared_ptr<void> TDataItem::getResultValue()
 
 #pragma region TDIdReadRegister
 
-
-TDIdReadRegister &TDIdReadRegister::Go()
+TREG_Read1 &TREG_Read1::Go()
 {
-	this->result = ERR_NYI;
+	switch (this->width)
+	{
+	case 8:
+		this->resultCode = apci_read8(apci, 0, BAR_REGISTER, this->offset, (__u8*)&this->Value);
+		break;
+	case 32:
+		this->resultCode = apci_read32(apci, 0, BAR_REGISTER, this->offset, &this->Value);
+		break;
+	}
 	return *this;
 }
 
-TError TDIdReadRegister::getResultCode()
+TError TREG_Read1::getResultCode()
 {
-	return this->result;
+	return this->resultCode;
 }
 
-std::shared_ptr<void> TDIdReadRegister::getResultValue()
+std::shared_ptr<void> TREG_Read1::getResultValue()
 {
-	return std::shared_ptr<__u32>(new __u32(this->Value));
+	switch (this->width)
+	{
+	case 8:
+		return std::shared_ptr<__u8>(new __u8(this->Value));
+	case 32:
+		return std::shared_ptr<__u32>(new __u32(this->Value));
+	}
 }
 
-TError TDIdReadRegister::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
+TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 {
 	TError result = ERR_SUCCESS;
 	if (Data.size() != 1)
@@ -448,18 +447,18 @@ TError TDIdReadRegister::validateDataItemPayload(DataItemIds DataItemID, TBytes 
 	return result;
 };
 
-TDIdReadRegister::TDIdReadRegister(DataItemIds DId, int ofs)
+TREG_Read1::TREG_Read1(DataItemIds DId, int ofs)
 {
-	// printf("! DIAG: DId passed to TDIdReadRegister constructor was %04X, ofs=%02X\n", DId, ofs);
+	// printf("! DIAG: DId passed to TREG_Read1 constructor was %04X, ofs=%02X\n", DId, ofs);
 	this->setDId(DId);
 	this->setOffset(ofs);
 }
 
-TDIdReadRegister::TDIdReadRegister(TBytes bytes)
+TREG_Read1::TREG_Read1(TBytes bytes)
 {
 	TDataItemHeader *head = (TDataItemHeader *)bytes.data();
 	TDataId DId = head->DId;
-	// printf("! DIAG: DId passed to TDIdReadRegister constructor(TBytes) was %04X\n", DId);
+	// printf("! DIAG: DId passed to TREG_Read1 constructor(TBytes) was %04X\n", DId);
 	GUARD(DId != DataItemIds::REG_Read1, ERR_DId_INVALID, DId);
 	TBytes data(bytes.cbegin() + sizeof(TDataItemHeader), bytes.cend());
 	TError result = ERR_SUCCESS;
@@ -470,17 +469,17 @@ TDIdReadRegister::TDIdReadRegister(TBytes bytes)
 	this->width = w;
 }
 
-TDIdReadRegister &TDIdReadRegister::setOffset(int ofs)
+TREG_Read1 &TREG_Read1::setOffset(int ofs)
 {
 	int w = widthFromOffset(ofs);
 	if (w == 0)
-		throw logic_error("Invalid offset passed to TDIdReadRegister::setOffset");
+		throw logic_error("Invalid offset passed to TREG_Read1::setOffset");
 	this->offset = ofs;
 	this->width = w;
 	return *this;
 }
 
-TBytes TDIdReadRegister::AsBytes()
+TBytes TREG_Read1::AsBytes()
 {
 	TBytes bytes;
 	TDataId DId = this->getDId();
@@ -495,7 +494,7 @@ TBytes TDIdReadRegister::AsBytes()
 	return bytes;
 }
 
-string TDIdReadRegister::AsString()
+string TREG_Read1::AsString()
 {
 	stringstream dest;
 	dest << "DataItem = " << this->getDIdDesc() << " [";
@@ -507,6 +506,8 @@ string TDIdReadRegister::AsString()
 	return dest.str();
 }
 #pragma endregion
+
+
 
 #pragma region TMessage implementation
 
@@ -753,7 +754,7 @@ TBytes TMessage::AsBytes()
 	__u8 msb = (payloadLength >> 8) & 0xFF;
 	__u8 lsb = payloadLength & 0xFF;
 	bytes.push_back(this->Id); /// WARN: only works because TMessageID == __u8
-	//printf("Message ID == %02X, payloadLength == %hd, LSB(PLen)=%hhd MSB=%hhd\n", Id, payloadLength, lsb, msb);
+	// printf("Message ID == %02X, payloadLength == %hd, LSB(PLen)=%hhd MSB=%hhd\n", Id, payloadLength, lsb, msb);
 	bytes.push_back(lsb);
 	bytes.push_back(msb);
 	for (auto item : this->DataItems)
@@ -800,5 +801,3 @@ string TMessage::AsString()
 }
 
 #pragma endregion
-
-

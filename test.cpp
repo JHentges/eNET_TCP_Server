@@ -75,13 +75,13 @@ int main(void) // "TEST"
     test(Message.AsBytes(), "TMessage(BRD_Reset())", ERR_SUCCESS);
 
     cout << "TEST addDataItem(TDIdReadRegister) with offset +20 (that's a 32-bit wide register)" << endl;
-    std::shared_ptr<TDIdReadRegister> read32(new TDIdReadRegister(DataItemIds::REG_Read1, 0x20));
+    std::shared_ptr<TREG_Read1> read32(new TREG_Read1(DataItemIds::REG_Read1, 0x20));
     Message.addDataItem(read32);
     cout << Message.AsString() << endl;
 
     cout << "----------------------" << endl;
     cout << "TEST addDataItem(TDIdReadRegister) (from +1, 8-bit)" << endl;
-    std::shared_ptr<TDIdReadRegister> read8(new TDIdReadRegister(DataItemIds::REG_Read1, +0x01));
+    std::shared_ptr<TREG_Read1> read8(new TREG_Read1(DataItemIds::REG_Read1, +0x01));
     Message.addDataItem(read8);
     cout << Message.AsString() << endl;
 

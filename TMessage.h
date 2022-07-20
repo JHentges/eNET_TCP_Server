@@ -2,31 +2,94 @@
 /*
 The TCP Server Message is received in a standardized format.
 Write functions to
-) Build DataItems with zero or more bytes as the DataItem's `Data`
-) Build Messages with zero or more DataItems as the Message `Payload`
-) Append DataItems to already built Messages
-) Validate a Message is well-formed (which also means all DataItems are well-formed)
-) convert an array of bytes into a Message
+x ) Build DataItems with zero or more bytes as the DataItem's `Data`
+x ) Build Messages with zero or more DataItems as the Message `Payload`
+x ) Append DataItems to already built Messages
+x ) Validate a Message is well-formed (which also means all DataItems are well-formed)
+x ) convert an array of bytes into a Message
 ) Parse the Message into a queue of Actions
 ) Execute the queue
 
-A Message is a sequence of bytes received by the TCP Server (across TCP/IP) in this format:
-	MLL_C
-where
-	M       is a Message ID# ("MId"), which may be mnemonic/logical
-	LL      is the Length of an optional payload
-	_       is zero or more bytes, the optional payload's data
-	C       is the checksum for all bytes in MMMM, LL, and _
+	A Message is a sequence of bytes received by the TCP Server (across TCP/IP) in this format:
+		MLL_C
+	where
+		M       is a Message ID# ("MId"), which may be mnemonic/logical
+		LL      is the Length of an optional payload
+		_       is zero or more bytes, the optional payload's data
+		C       is the checksum for all bytes in MMMM, LL, and _
 
-Given: checksum is calculated on all bytes in Message; the sum, including the checksum, should be zero
+	Given: checksum is calculated on all bytes in Message; the sum, including the checksum, should be zero
 
-Further, the payload is an ordered list of zero or more Data Items, which are themselves a sequence of bytes, in this format:
-	DDL_
-where
-	DD      is the Data ID# ("DId"), which identifies the *type* of data encapsulated in this data item
-	L       is the length of the data encapsulated in this data item (in bytes) (excluding L and Did)
-	_       is the Data Item's payload, or "the data"; `byte[L] Data`
+	Further, the payload is an ordered list of zero or more Data Items, which are themselves a sequence of bytes, in this format:
+		DDL_
+	where
+		DD      is the Data ID# ("DId"), which identifies the *type* of data encapsulated in this data item
+		L       is the length of the data encapsulated in this data item (in bytes) (excluding L and Did)
+		_       is the Data Item's payload, or "the data"; `byte[L] Data`
 
+
+	// Messages as code [byte-packed little-endian structs]:
+	struct TDataItem {
+		__u16	DId;
+		__u8	Length;
+		__u8[Length] Data; // conceptually, a union with per-DId "parameter structs"
+	}
+
+	struct TMessage {
+		__u8	MId;
+		__u16	Length;
+		__u8[Length] Payload; // conceptually a TDataItem[]
+		__u8	Checksum;
+	}
+
+Each TDataItem in a Message represents an "Action", generally a read and/or a write of something as specified by the DId.
+
+Messages serve to bundle TDataItem's Actions into atomic execution blocks.  All of the TDataItems in a Message are executed
+	in order without any TDataItems from other Clients' Messages squeezing between.
+
+The MId in the Response to Messages that encounter no errors "R" "Response".
+The Response to Messages that are "well formed" (have valid syntax), even if other categories of errors are encountered,
+	will be a Message with the same number of TDataItems as the Message, such that "Response.Payload.TDataItem[index]"
+	provides the results (data read or written) of the corresponding "Message.Payload.TDataItem[index]".
+
+Messages can generate three categories of Errors: "Syntax Errors", "Semantic Errors", and "Operational Errors".
+*	Syntax Errors are structural mismatches. Examples include:
+		Unrecognized MId or DId
+		Message or DataItem Length doesn't match the purported length
+		Bad checksum byte
+		etc
+	Syntax Errors are caught, and reported, while the TByte Message is being parsed, before any Actions are taken.
+	Syntax Errors are likely to *cause* the parser to think additional Syntax Errors exist in the TBytes of the Message,
+		so only the first detected Syntax Error is reported, via an MId == "E" Response Message to the socket/client, with
+		a single TDataItem of type DId == SyntaxError (FFFF).
+	The MId for the Response to Messages that encounter a Syntax Error (during parse) is "X" "syntaX".
+	The payload in an X Response will contain one or more TDataItems with details about the detected Syntax Error.
+
+*	Semantic Errors are invalid content in otherwise validly structured places ("bad parameter"). Examples include:
+		An ADC channel higher than the number of channels on the device
+		A Register offset that refers to an undefined register
+		A PWM base frequency that is too fast or too slow for the device to generate
+		A bitIndex that exceeds the number of bits on the device
+	Semantic Errors are caught, and the offending TDataItem is skipped, during the execution of the Message's bundle
+		of TDataItems, and reported *after* the entire Message has been executed.
+
+	The MId for the Response to Messages that encounter Semantic or Execution errors is "E" "Error".
+	A Response to a Message that contains one or more Semantic Errors among its TDataItems will result in an "E" Response Message,
+		with one TDataItem in the E Reponse per TDataItem in the Message, but the TDataItem generated for TDataItems that had
+		Semantic Errors will so indicate via a special DId.
+
+*	Operational Errors occur from hardware faults, temporary or permanent.  Examples include:
+		DAC SPI-Bus "Wait For Not Busy" Timeout duration exceeded
+		Create File operation failed
+		Firmware Rev xx Binary not found
+		ADC "Wait For End Of Conversion" Timeout duration exceeded
+	A Response to a Message that encountered one or more Operational Errors during execution will result in an "E" Response Message,
+		with one TDataItem in the E Reponse per TDataItem in the Message, but the TDataItem generated for TDataItems that encountered
+		Operational Errors will so indicate via a special DId.
+
+
+
+TODO: implement a good TError replacement
 TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload()'s comments below
 */
 #include <memory>
@@ -215,7 +278,7 @@ public:
 
 protected:
 	TBytes Data;
-	TError result;
+	TError resultCode;
 
 private:
 	DataItemIds Id{0};
@@ -228,25 +291,25 @@ public:
 	TDataItemNYI() = default;
 };
 #pragma endregion
-#pragma region class TDIdReadRegister : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
-class TDIdReadRegister : public TDataItem
+#pragma region class TREG_Read1 : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
+class TREG_Read1 : public TDataItem
 {
 // 1) Deserialization
 public:
 	// called by TDataItem::fromBytes() via DIdList association with DId
-	TDIdReadRegister(TBytes bytes);
+	TREG_Read1(TBytes bytes);
 
 // 2) Serialization: For creating Objects to be turned into bytes
 public:
 	// constructor of choice for source; all parameters included. TODO: ? make overloadable
-	TDIdReadRegister(DataItemIds DId, int ofs);
-	TDIdReadRegister() = default;
+	TREG_Read1(DataItemIds DId, int ofs);
+	TREG_Read1() = default;
 	virtual TBytes AsBytes();
-	TDIdReadRegister & setOffset(int ofs);
+	TREG_Read1 & setOffset(int ofs);
 
 // 3) Verbs
 public:
-	virtual TDIdReadRegister &Go();
+	virtual TREG_Read1 &Go();
 	virtual TError getResultCode();
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
@@ -259,7 +322,7 @@ public:
 	int width{0};
 
 private:
-	__u8 Value;
+	__u32 Value;
 };
 
 #pragma endregion
