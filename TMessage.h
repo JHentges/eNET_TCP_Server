@@ -1,26 +1,33 @@
 #pragma once
 /*
-The TCP Server Message is received in a standardized format.
-Write functions to
-x ) Build DataItems with zero or more bytes as the DataItem's `Data`
-x ) Build Messages with zero or more DataItems as the Message `Payload`
-x ) Append DataItems to already built Messages
-x ) Validate a Message is well-formed (which also means all DataItems are well-formed)
-x ) convert an array of bytes into a Message
-) Parse the Message into a queue of Actions
-) Execute the queue
+A Message is received in a standardized format as an array of bytes, generally across TCP.
 
+This TMessage Library provides functions to:
+* "deserialize" a Message: convert an array of bytes into a TMessage
+* Build DataItems with zero or more bytes as the DataItem's `Data`
+* Build Messages with zero or more DataItems as the Message `Payload`
+* Append DataItems to already built Messages
+* Validate a Message is well-formed (which also means all DataItems in its payload are well-formed)
+* "serialize" a Message into an array of bytes (generally for sending across TCP)
+* Produce human-readable versions of Messages (.AsString()) for diagnostic/documentation use
+
+
+[MESSAGE FORMAT]
 	A Message is a sequence of bytes received by the TCP Server (across TCP/IP) in this format:
 		MLL_C
 	where
-		M       is a Message ID# ("MId"), which may be mnemonic/logical
+		M       is a Message ID# ("MId"), which may be mnemonic/logical; proposed MId include "C", "Q", "E", "X", "R", and "M"
 		LL      is the Length of an optional payload
 		_       is zero or more bytes, the optional payload's data
 		C       is the checksum for all bytes in MMMM, LL, and _
 
 	Given: checksum is calculated on all bytes in Message; the sum, including the checksum, should be zero
 
-	Further, the payload is an ordered list of zero or more Data Items, which are themselves a sequence of bytes, in this format:
+[PAYLOAD FORMAT]
+	The payload is an ordered list of zero or more Data Items
+
+[DATA ITEM FORMAT]
+	Data Items are themselves a sequence of bytes, in this format:
 		DDL_
 	where
 		DD      is the Data ID# ("DId"), which identifies the *type* of data encapsulated in this data item
@@ -52,6 +59,7 @@ The Response to Messages that are "well formed" (have valid syntax), even if oth
 	will be a Message with the same number of TDataItems as the Message, such that "Response.Payload.TDataItem[index]"
 	provides the results (data read or written) of the corresponding "Message.Payload.TDataItem[index]".
 
+[ERRORS]
 Messages can generate three categories of Errors: "Syntax Errors", "Semantic Errors", and "Operational Errors".
 *	Syntax Errors are structural mismatches. Examples include:
 		Unrecognized MId or DId
@@ -86,6 +94,7 @@ Messages can generate three categories of Errors: "Syntax Errors", "Semantic Err
 	A Response to a Message that encountered one or more Operational Errors during execution will result in an "E" Response Message,
 		with one TDataItem in the E Reponse per TDataItem in the Message, but the TDataItem generated for TDataItems that encountered
 		Operational Errors will so indicate via a special DId.
+
 
 
 
