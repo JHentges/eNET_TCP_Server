@@ -10,11 +10,15 @@
 using namespace std;
 
 const vector<TMessageId> ValidMessages{
-	'Q',
-	'R',
-	'C',
+	'Q', // query/read
+	'C', // config/write
+	'M', // generic Message; bundle of Actions
+	'R', // Response, no errors
+	'X', // response, error, syntaX
+	'E', // response, Error, semantic or operational (hardware)
 };
 
+// crap function returns 8 or 32 for valid offsets into eNET-AIO's register map, or 0 for invalid
 int widthFromOffset(int ofs)
 {
 	int w = 0;
@@ -26,6 +30,7 @@ int widthFromOffset(int ofs)
 }
 
 // DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
+#define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
 TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},

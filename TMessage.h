@@ -95,9 +95,6 @@ Messages can generate three categories of Errors: "Syntax Errors", "Semantic Err
 		with one TDataItem in the E Reponse per TDataItem in the Message, but the TDataItem generated for TDataItems that encountered
 		Operational Errors will so indicate via a special DId.
 
-
-
-
 TODO: implement a good TError replacement
 TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload()'s comments below
 */
@@ -355,11 +352,6 @@ class TDIdDacOutput : public TDataItem
 class TMessage
 {
 public:
-	/* A Message consists of a Header (TMessageHeader) and optional payload plus a checksum byte
-	 * This function parses an array of bytes that is supposed to be an entire Message
-	 * ...then returns a TMessage and sets result to indicate error/success.
-	 * It returns NULL on errors
-	 */
 	// Sums all bytes in Message, specifically including the checksum byte
 	// WARNING: this algorithm only works if TChecksum is a byte
 	static TCheckSum calculateChecksum(TBytes Message);
@@ -377,13 +369,19 @@ public:
 	 * ...then returns a vector of those TDataItems and sets result to indicate error/success
 	 */
 	static TPayload parsePayload(TBytes Payload, __u32 payload_length, TError &result);
-	// factory method but might not be as good as TDataItem::fromBytes(), and figure out F or f
+	// factory method but might not be as good as TDataItem::fromBytes()
+	// TODO: figure out F or f for the name
 	static TMessage FromBytes(TBytes buf, TError &result);
 
 public:
 	TMessage() = default;
 	TMessage(TMessageId MId);
 	TMessage(TMessageId MId,TPayload Payload);
+	/*
+	 * This function parses a vector<byte> that is supposed to be an entire Message
+	 * and returns a TMessage Object if no Syntax Errors were encountered.
+	 * It throws exceptions on errors
+	 */
 	TMessage(TBytes Msg);
 
 public:
@@ -404,9 +402,6 @@ protected:
 // utility template to turn class into base-class-pointer-to-instance-on-heap
 template <class X> std::unique_ptr<TDataItem> construct() { return std::unique_ptr<TDataItem>(new X); }
 
-// template <class X>
-// std::unique_ptr<TDataItem> construct(Arg...) { return std::unique_ptr<TDataItem>(new X(Arg...)); }
-
 typedef std::unique_ptr<TDataItem> DIdConstructor();
 
 typedef struct
@@ -419,5 +414,4 @@ typedef struct
 	std::string desc;
 } TDIdListEntry;
 
-#define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
 extern TDIdListEntry const DIdList[];
