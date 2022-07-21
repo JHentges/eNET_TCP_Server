@@ -75,7 +75,7 @@ Messages can generate three categories of Errors: "Syntax Errors", "Semantic Err
 
 *	Semantic Errors are invalid content in otherwise validly structured places ("bad parameter"). Examples include:
 		An ADC channel higher than the number of channels on the device
-		A Register offset that refers to an undefined register
+		A Register offset that isn't defined on the device
 		A PWM base frequency that is too fast or too slow for the device to generate
 		A bitIndex that exceeds the number of bits on the device
 	Semantic Errors are caught, and the offending TDataItem is skipped, during the execution of the Message's bundle
@@ -95,9 +95,114 @@ Messages can generate three categories of Errors: "Syntax Errors", "Semantic Err
 		with one TDataItem in the E Reponse per TDataItem in the Message, but the TDataItem generated for TDataItems that encountered
 		Operational Errors will so indicate via a special DId.
 
+
 TODO: implement a good TError replacement
 TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload()'s comments below
 */
+
+/*[aioenetd Protocol 2 TCP-Listener/Server Daemon/Service implementation and concept notes]
+from discord code-review conversation with Daria; these do not belong in this source file:
+	your "the main loop" == "my worker thread that dequeues Actions";
+	your "exploding" == "my Object factory construction";
+	You've moved "my Object construction" into a single-threaded spot, "the main loop", from where I have it, in an
+	individual socket's receive-thread.
+	Because I have multiple receive threads it isn't nearly as necessary to "be fast": the TCP Stack will queue bytes for me.
+	Because my error-checking location (the parser, the exploder, .FromBytes()) is in a socket-specific (ie client-specific)
+	thread it is harder for fuzzed bytes sent over TCP to affect other clients or the device as a whole.
+	Because my worker and all receive threads share a thread-safe std::queue<> everything is serialized nicely.
+
+	By putting 66% of the error checking, syntax AND semantic (but not operational errors, eg hardware timeouts) into the
+	receive threads — and in fact, into the TMessage constructor, I am guaranteed all TMessage Objects are valid and safe
+	to submit to the worker thread, thus less likely to cause errors in that single-thread / single-point-of-failure
+	(and make the worker execution faster, as it is "my single thread" and thus bottleneck)
+-----
+	A TMessage is constructed from received bytes by `auto aMessage = TMessage::fromBytes(buf);`, or an "X" Response TMessage with
+	syntax error details gets returned, instead.
+	Either way, the constructed TMessage is pushed into the Action Queue.
+	The asynchronous worker thread pops a TMessage off the Action Queue, does a `for(aDataItem : aMessage.Payload){aDataItem.Go()}`,
+	and either modifies-in-place and sends the TMessage as a reply or constructs and sends a new TMessage as the reply,
+	the TMessage(s) then goes out of scope and deallocates
+-----
+	The TMessage library needs to handle syntax errors, mistakes in the *format* of a bytestream, and semantic errors, mistakes
+	in the *content* of the received bytes.  Some categoriese of semantic errors, however, are specific to a particular model of eNET-
+	device, let alone specific to a model Family.
+
+	Consider ADC_GetChannelV(iChannel): iChannel is valid if (0 <= iChannel <= 15), right?  Nope, not "generally": this is only true
+	for the ~12 models in the base Family, eNET-AIO16-16F, eNET-AI12-16E, etc.  But eNET- devices, and therefore Protocol 2 devices
+	intended to operate via this TMessage library and the aioenetd implementation, include the DPK and DPK M Families; this means:
+	iChannel is valid if (0 <= iChannel <= highestAdcChan), and highestAdcChan is 15, 31, 63, 96, or 127; depending on the specific
+	model running aioenetd/using this library.
+
+	So, to catch Semantic errors of this type (invalid channel parameter in an ADC_GetChannelV() TDataItem) the parser must "know"
+	the value of "highestAdcChan" for the model it is running on.
+
+	The sum of all things that the parser needs to know to handle semantic error checking, specific to the model running the library,
+	are encapsulated as "getters" in a HAL.  The list is quite long as there are a LOT of variations built out of the eNET-AIO design.
+
+	These "getters" *could* be implemented in a static, compile-time, manner.  Consider a device_specific.h file that has a bunch of
+	eg `#define highestAdcChan 31`-type constants defined.  However, this is a "write it for 1" approach, and would require loading a
+	different TMessage library binary for every model, as the binary is effectively hard-coded for a specific device's needs.
+
+	The USB FWE2.0 firmwares are almost this simplistic in their approach to a HAL: there is a device_specific.h, but there is also a
+	run-time operation that introspects the DeviceID and tweaks some constants, like the friendly_model_name string, to a model-specific
+	value.  This run-time operation is a hard-coded switch(DeviceId){}, and thus is implemented per Firmware (but allows one Firmware
+	to run, as a binary, on any models built from the same or compatible PCB).
+
+	This only works because there are very few variants per firmware source: the USB designs are sufficiently different that reusing
+	firmware is implausible: it would require a *real* HAL implementation (one that abstracted every pin on the FX2, and every
+	register that could ever exist on the external address/data bus).
+
+	We're going for a better approach to the HAL in this library.
+
+	TBD, LOL
+
+	The library implementation, today (2022-07-21 @ 10:55am Pacific), only checks for Semantic errors in the one DId that's been
+	implemented; REG_Read1(offset).  This DId uses a helper function hardcoded in the source called `WidthFromOffset(offset)`,
+	which returns one of 0, 8, or 32, indicating "invalid offset", "offset is a valid 8-bit register", or "offset is a valid
+	32-bit register", respectively.  In theory it should be able to respond "16" as well, but the eNET-AIO, in all of its models,
+	has no 16-bit registers.  This is an instance where the HAL is weak; "WidthFromOffset()" shouldn't be hard-coded; it should
+	be able to respond accurately about whatever device it is running on (or perhaps even whatever device it is asked about).
+
+	One way to accomplish this would be loading configuration information tables from nonvolatile on-device storage.  "tables",
+	here, is plural not to refer to both a hypothetical single table needed for WidthFromOffset() and all the other tables for
+	supporting other HAL-queriables, but to express that WidthFromOffset() *alone* needs several tables, if it is to support
+	the general case.  Sure, eNET-AIO only has registers that can each only be correctly accessed at a specific bit width (ie it is
+	unsafe or impossible to successfully read or write 8 bits from any eNET-AIO 32-bit register), but many ACCES devices do not
+	have this limitation; most devices support 8, 16, or 32-bit access to any register or group thereof (as long as offsets are
+	width-aligned; eg 32-bit operations require that offset % 4 == 0).  WidthFromOffset() therefore becomes complex, and
+	declaratively describing each device's capabilities and restrictions is also complex.
+
+	Another approach would be to implement a "HAL interface" (C++ calls an interface an Abstract Base Class or ABC) which the library
+	would use to access the needed polymorphisms via a device-specific TDeviceHAL object it is provided ("Dependency Injection").
+	Every TDeviceHAL descendant would provide not-less-than a set of device-specific constants like `highestAdcChan` from the
+	introduction example.  Better would be to also include "verbs" that implement generic operations as needed for the specific
+	device, like an ADC_SetRange1(iChannel, rangeSpan), but this level of interface is incredibly complex, in any generic form.
+
+	Consider the RA1216 which expects the ADC input range to be specified as a voltage span code plus an offset in ±16-bit counts;
+
+	This is an extreme example, an outlier; an example that forces "the most general case" to be handled ... but this is merely the
+	outlier in the "ADC RangeCode" axis.  Consider the RAD242 which has a 24-bit ADC, the AD8-16 which has an 8-bit ADC, the
+	USB-DIO-32I which has 1 bit per I/O Group instead of the typical 8 or 4 bits — there are *many* axes of outliers, and they all
+	become necessary to handle if you try to make a truly generic library/HAL interface.
+
+	This is why "Universal Libraries" (like National provides) are so big and difficult to code against.
+
+	Thus, "Protocol 2" is designed to be slightly generic, but more importantly, extensible.
+
+
+	Similar to
+	the simplistic #include "device_specific.h" "#define" approach, but supporting run-time selection of which "{modelUID}.h" is
+	used.
+
+
+
+
+---
+	TMessages and TDataItems and such all use "smart pointers", in many cases unique_ptr<> (and I'm wanting to move more of the
+	shared_ptr<> to unique_ptr<> in the future but lack the experience to simply grok the impact on my code/algorithm/structure)
+
+ */
+
 #include <memory>
 #include <iostream>
 #include <string>
@@ -136,7 +241,7 @@ int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
 // Template class to slice a vector from range Start to End
 template <typename T>
-vector<T> slicing(vector<T> const &v, int Start, int End)
+std::vector<T> slicing(std::vector<T> const &v, int Start, int End)
 {
 
 	// Begin and End iterator
@@ -144,7 +249,7 @@ vector<T> slicing(vector<T> const &v, int Start, int End)
 	auto last = v.begin() + End + 1;
 
 	// Copy the element
-	vector<T> vector(first, last);
+	std::vector<T> vector(first, last);
 
 	// Return the results
 	return vector;

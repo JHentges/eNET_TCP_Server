@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <stdexcept>
+using namespace std;
 
 #include "TMessage.h"
 #include "TError.h"
@@ -7,12 +8,12 @@
 #include "apcilib.h"
 #include "eNET-AIO.h"
 
-using namespace std;
-
-const vector<TMessageId> ValidMessages{
+const vector<TMessageId> ValidMessageIDs{
+// to server
 	'Q', // query/read
 	'C', // config/write
 	'M', // generic Message; bundle of Actions
+// to client
 	'R', // Response, no errors
 	'X', // response, error, syntaX
 	'E', // response, Error, semantic or operational (hardware)
@@ -527,9 +528,9 @@ TCheckSum TMessage::calculateChecksum(TBytes Message)
 bool TMessage::isValidMessageID(TMessageId MessageId)
 {
 	bool result = false;
-	for (int i = 0; i < sizeof(ValidMessages) / sizeof(TMessageId); i++)
+	for (int i = 0; i < sizeof(ValidMessageIDs) / sizeof(TMessageId); i++)
 	{
-		if (ValidMessages[i] == MessageId)
+		if (ValidMessageIDs[i] == MessageId)
 		{
 			result = true;
 			break;

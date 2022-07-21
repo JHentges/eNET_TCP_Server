@@ -11,11 +11,9 @@ typedef uint32_t __u32;
 #include <stdio.h>
 #include <memory>
 #include <vector>
-using std::vector, std::begin, std::end;
-
 
 /* type definitions */
-typedef vector<__u8> TBytes;
+typedef std::vector<__u8> TBytes;
 typedef __u8 TMessageId;
 typedef __u16 TMessagePayloadSize;
 typedef __u8 TCheckSum;
