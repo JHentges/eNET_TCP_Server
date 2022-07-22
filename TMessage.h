@@ -17,7 +17,8 @@ This TMessage Library provides functions to:
 		MLLLL_C
 	where
 		M       is a Message ID# ("MId"), which may be mnemonic/logical; proposed MId include "C", "Q", "E", "X", "R", and "M"
-		LLLL    is the Length of an optional payload
+		LLLL    is the Length of an optional payload; the 21 LSBits are significant; bits 31:21 are reserved flag bits
+				// TODO: confirm 21 bits is the minimum to hold 16*(sizeof(TDataItemHeader)+maxDataLength)
 		_       is zero or more bytes, the optional payload's data
 		C       is the checksum for all bytes in MMMM, LL, and _
 
@@ -116,7 +117,10 @@ TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload(
 extern int apci; // global handle to device file for DAQ circuit on which to perform reads/writes
 
 #define __valid_checksum__ (TCheckSum)(0)
-#define minimumMessageLength (__u32)(sizeof(TMessageHeader) + sizeof(TCheckSum))
+#define minimumMessageLength ((__u32)(sizeof(TMessageHeader) + sizeof(TCheckSum)))
+#define maxDataLength (std::numeric_limits<TDataItemLength>::max())
+#define maxPayloadLength ((__u32)(sizeof(TDataItemHeader) + maxDataLength) * 16)
+
 #pragma region utility functions / templates < >
 
 #define s_print(s, ...)              \

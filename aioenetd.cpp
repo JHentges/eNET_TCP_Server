@@ -105,7 +105,7 @@ from discord code-review conversation with Daria; these do not belong in this so
 		concern).
 
 		No future version of this protocol will support longer length Messages.  Instead, if an eNET- device *needs* longer
-		Messages or DataItems, or needs either in *unspecified* lengths, clients will connect to a different port and use a different
+		Messages or DataItems, or needs either in *unspecified* lengths, clients will connect to a different listen_port and use a different
 		protocol.  This is how Protocol 1 supports "ADC Streaming".
 	]
 
@@ -121,7 +121,7 @@ from discord code-review conversation with Daria; these do not belong in this so
 	OR
 	3 	a single send-thread and queue exist, created by Main and stuffed by the action-thread
 
-	Root listen in Main run-loop receives on primary connect port#; valid connections spawn receive-threads that listen on the Socket
+	Root listen in Main run-loop receives on primary connect listen_port#; valid connections spawn receive-threads that listen on the Socket
 	Multiple Clients can connect; each gets one listen-thread (and perhaps one send-queue & thread).
 
 	[receive-threads]
@@ -183,11 +183,16 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include <queue>
 #include <sstream>
 #include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>   //close
 #include <arpa/inet.h>	//close
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include <semaphore.h>
@@ -197,60 +202,18 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include <math.h>
 #include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <netdb.h>
+#include <fcntl.h>
+#include <strings.h>
 
-	#include <iostream>
-	#include <condition_variable>
-	#include <mutex>
-	#include <thread>
-	#include <vector>
-namespace example_code_from_web {
+#include "safe_queue.h"
+#include "TMessage.h"
 
-	std::mutex mutex_;
-	std::condition_variable condVar;
+int listen_port = 0x8080;
 
-	std::vector<int> myVec{};
-
-	void prepareWork() {										// (1)
-
-		{
-			std::lock_guard<std::mutex> lck(mutex_);
-			myVec.insert(myVec.end(), {0, 1, 0, 3});			// (3)
-		}
-		std::cout << "Sender: Data prepared."  << std::endl;
-		condVar.notify_one();
-	}
-
-	void completeWork() {									   // (2)
-
-		std::cout << "Worker: Waiting for data." << std::endl;
-		std::unique_lock<std::mutex> lck(mutex_);
-		condVar.wait(lck, [] { return not myVec.empty(); });
-		myVec[2] = 2;										   // (4)
-		std::cout << "Waiter: Complete the work." << std::endl;
-		for (auto i: myVec) std::cout << i << " ";
-		std::cout << std::endl;
-
-	}
-
-	int main() {
-
-		std::cout << std::endl;
-
-		std::thread t1(prepareWork);
-		std::thread t2(completeWork);
-
-		t1.join();
-		t2.join();
-
-		std::cout << std::endl;
-
-	}
-}
-
-
-int port = 0x8080;
-
-#define DEVICEPATH "/dev/apci/pcie_adio16_16f_0"
+#define DEVICEPATH "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
 int apci = 0;
 
 pthread_t logger_thread;
@@ -259,7 +222,7 @@ pthread_t worker_thread;
 bool bTERMINATE = false;
 
 #define LOG_FILE_NAME "protocol_log.txt"
-std::queue<std::string> Log;
+SafeQueue<std::string> Log;
 
 void abort_handler(int s)
 {
@@ -270,28 +233,26 @@ void abort_handler(int s)
 	exit(1);
 }
 
-void *log_main(void *arg)
-//	pthread_create(&logger_thread, NULL, &log_main, conn_fd);
+//	pthread_create(&logger_thread, NULL, &sender_thread, conn_fd);
+void *sender_thread(void *arg)
 {
-	int *conn_fd = (int *)arg;
-
-	while (1)
+	int conn = *(int*)(arg);
+	printf("a Logger Thread started, connection ID %d", conn);
+	while (!bTERMINATE)
 	{
-		if (bTERMINATE){
 
-			printf("logger thread told to terminate via global flag\n");
-			break;
-		}
-		if (! Log.empty())
-		{
-			std::string msg = Log.front();
-
-			auto sentbytes = send(conn, msg.c_str(), msg.size(), 0);
-			if (sentbytes != -1)
-				Log.pop_front();
-		}
+		std::string msg = Log.dequeue();
+		auto sentbytes = send(conn, msg.c_str(), msg.size(), 0);
+		if (sentbytes == -1) // failed-to-send, so re-queue and infrom
+			Log.enqueue(msg);
 	};
+
+	if (bTERMINATE) {
+		printf("logger thread told to terminate via global flag\n");
+	}
+
 	printf("log_man exiting\n");
+	return nullptr;
 }
 
 //------------------- Signal---------------------------
@@ -306,53 +267,38 @@ static void sig_handler(int sig)
 }
 //---------------------End signal -----------------------
 
-// TODO: allocate dynamically in an appropriate std::collection<>
-const int max_clients = 30;
-int client_socket[max_clients];
+std::vector<int>ClientList;
+TBytes buffer;
 
-int main(int argc , char *argv[])
+int main(int argc, char *argv[])
 {
-
-   printf("Args is %d\n",argc);
+	signal(SIGINT, sig_handler);
+    printf("Arg count is %d\n",argc);
 	if(argc <2){
 
-		printf("Error no tcp port specified\n");
-
+		printf("Error no tcp listen_port specified\n");
+		printf("Usage: %s port_to_listen\n(i.e., %s 0x8080", argv[0], argv[0]);
 		exit(-1);
 	}
-	sscanf(argv[1], "%d", &port);
+	sscanf(argv[1], "%d", &listen_port);
+	printf("Listen port: %d\n", listen_port);
 
 
-	signal(SIGINT, sig_handler);
-
-
-	apci = open(DEVICEPATH, O_RDONLY);
-
+	apci = open(DEVICEPATH, O_RDONLY); // TODO: FIX: open the ONLY file in /dev/apci/ instead of a #defined filename
 	if(apci < 0){
-
-		printf("Error cannot open Device file Please ensure the APCI driver module is loaded \n");
+		printf("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file\n");
 	}
 
-	initAdc();
+	buffer.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
 
-	int opt = TRUE;
+	bool opt = true;
 	int master_socket , addrlen , new_socket , activity, i , valread , sd;
-	int max_sd;
 	struct sockaddr_in address;
-
-	char buffer[1025];  //data buffer of 1K
 
 	//set of socket descriptors
 	fd_set readfds;
 
-	//a message
-	char *message = "ECHO Daemon v1.0 \r\n";
-
-	//initialise all client_socket[] to 0 so not checked
-	for (i = 0; i < max_clients; i++)
-	{
-		client_socket[i] = 0;
-	}
+	ClientList.clear();
 
 	//create a master socket
 	if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0)
@@ -373,20 +319,19 @@ int main(int argc , char *argv[])
 	//type of socket created
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons( port );
+	address.sin_port = htons( listen_port );
 
-	//bind the socket to localhost port 8888
+	//bind the socket to localhost listen_port 8888
 	if (bind(master_socket, (struct sockaddr *)&address, sizeof(address))<0)
 	{
 		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
-	printf("Listener on port %d \n", port);
 
 	//try to specify maximum of 3 pending connections for the master socket
 	if (listen(master_socket, 3) < 0)
 	{
-		perror("listen");
+		perror("listen(master_socket) failed");
 		exit(EXIT_FAILURE);
 	}
 
@@ -394,106 +339,88 @@ int main(int argc , char *argv[])
 	addrlen = sizeof(address);
 	puts("Waiting for connections ...");
 
-	while(TRUE)
+	while(true)
 	{
 		//clear the socket set
 		FD_ZERO(&readfds);
-
-		//add master socket to set
 		FD_SET(master_socket, &readfds);
-		max_sd = master_socket;
 
-		//add child sockets to set
-		for ( i = 0 ; i < max_clients ; i++)
+		// add child sockets to set
+		// FIX: this should be in each read-thread
+		for ( auto aClient : ClientList)
 		{
-			//socket descriptor
-			sd = client_socket[i];
-
-			//if valid socket descriptor then add to read list
-			if(sd > 0)
-				FD_SET( sd , &readfds);
-
-			//highest file descriptor number, need it for the select function
-			if(sd > max_sd)
-				max_sd = sd;
+			FD_SET( aClient , &readfds);
 		}
 
-		//wait for an activity on one of the sockets , timeout is NULL ,
-		//so wait indefinitely
-		activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
-
-		if ((activity < 0) && (errno!=EINTR))
+		// WARN: BLOCK until activity occurs on any listen port
+		// TODO: FIX: shouldn't block; main run-loop should act as a watchdog and do logging or whatnot
+		// WAS: activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL); but I've removed mx_sd
+		//      while refactoring int client_socket[30]; int max_clients = 30; into vector<int> ClientList
+		activity = select( ClientList.size(), &readfds , NULL , NULL , NULL);
+		if ((activity < 0) && (errno != EINTR))
 		{
 			printf("select error");
 		}
 
-		//If something happened on the master socket ,
-		//then its an incoming connection
+		// If something happened on the master socket then it is a new incoming connection
 		if (FD_ISSET(master_socket, &readfds))
 		{
-			if ((new_socket = accept(master_socket,
-					(struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
+			if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
 			{
 				perror("accept");
 				exit(EXIT_FAILURE);
 			}
 
-			//inform user of socket number - used in send and receive commands
-			printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs
-				  (address.sin_port));
+			printf("New connection, socket fd is %d , ip is : %s , listen_port : %d \n",
+			       new_socket, inet_ntoa(address.sin_addr) , ntohs(address.sin_port)
+				  );
 
-
-			//add new socket to array of sockets
-			for (i = 0; i < max_clients; i++)
-			{
-				//if position is empty
-				if( client_socket[i] == 0 )
-				{
-					client_socket[i] = new_socket;
-					printf("Adding to list of sockets as %d\n" , i);
-
-					break;
-				}
-			}
+			std::cout << "Adding to list of sockets as " << ClientList.size() << std::endl;
+			ClientList.push_back(new_socket);
 		}
 
-		//else its some IO operation on some other socket
-		for (i = 0; i < max_clients; i++)
+		// else its some IO operation on some other socket // FIX: should be handled by each read-thread
+		for (auto aClient : ClientList)
 		{
-			sd = client_socket[i];
-
 			if (FD_ISSET( sd , &readfds))
 			{
-				//Check if it was for closing , and also read the
-				//incoming message
-				if ((valread = read( sd , buffer, 1024)) == 0)
-				{
-					//Somebody disconnected , get his details and print
-					getpeername(sd , (struct sockaddr*)&address , \
-						(socklen_t*)&addrlen);
-					printf("Host disconnected , ip %s , port %d \n" ,
+				// Read the incoming message
+				valread = read( aClient , buffer.data(), buffer.capacity());
+
+				// if zero bytes were read, close the socket // FIX: should terminate the read-thread
+				if (valread == 0) {
+					// Somebody disconnected , get his details and print
+					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
+					printf("Host disconnected , ip %s , listen_port %d \n" ,
 						  inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
 
 					//Close the socket and mark as 0 in list for reuse
-					close( sd );
-					client_socket[i] = 0;
-				}
-
-				//Echo back the message that came in
-				else
-				{
-					if(validate_packet(buffer,sd)== -1){
-
-						printf("packet validation failed hence sending NACK\n");
-						sendNack(sd,"00");
-
-					}else{
-
-						printf("Packet is valid hence sending Respose \n");
-						//sendAck(sd);
-
+					close( aClient );
+					auto index = find(ClientList.begin(), ClientList.end(), aClient);
+					if (index != ClientList.end())
+						ClientList.erase(index);
+					else{
+						// handle bad error: the for-each determined aClient can't be found???
 					}
-
+				}
+				else // some bytes were read
+				{
+					try
+					{
+						TError result;
+						auto aMessage = TMessage::FromBytes(buffer, result);
+						std::cout << aMessage.AsString() << std::endl;
+						TBytes buf = aMessage.AsBytes();
+						int bytesSent = send(aClient, buf.data(), buf.size(), 0);
+						if (bytesSent == -1)
+						{
+							// handle xmit error
+						}
+					}
+					catch(std::logic_error e)
+					{
+						std::cout << e.what() << std::endl;
+					}
 				}
 			}
 		}
