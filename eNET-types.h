@@ -15,10 +15,10 @@ typedef uint32_t __u32;
 /* type definitions */
 typedef std::vector<__u8> TBytes;
 typedef __u8 TMessageId;
-typedef __u16 TMessagePayloadSize;
+typedef __u32 TMessagePayloadSize;
 typedef __u8 TCheckSum;
 typedef __u16 TDataId;
-typedef __u8 TDataItemLength;
+typedef __u16 TDataItemLength;
 
 class TDataItem;
 

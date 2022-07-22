@@ -14,10 +14,10 @@ This TMessage Library provides functions to:
 
 [MESSAGE FORMAT]
 	A Message is a sequence of bytes received by the TCP Server (across TCP/IP) in this format:
-		MLL_C
+		MLLLL_C
 	where
 		M       is a Message ID# ("MId"), which may be mnemonic/logical; proposed MId include "C", "Q", "E", "X", "R", and "M"
-		LL      is the Length of an optional payload
+		LLLL    is the Length of an optional payload
 		_       is zero or more bytes, the optional payload's data
 		C       is the checksum for all bytes in MMMM, LL, and _
 
@@ -28,23 +28,24 @@ This TMessage Library provides functions to:
 
 [DATA ITEM FORMAT]
 	Data Items are themselves a sequence of bytes, in this format:
-		DDL_
+		DDLL_
 	where
 		DD      is the Data ID# ("DId"), which identifies the *type* of data encapsulated in this data item
-		L       is the length of the data encapsulated in this data item (in bytes) (excluding L and Did)
-		_       is the Data Item's payload, or "the data"; `byte[L] Data`
+		LL      is the length of the optional payload "Data"
+		_       is zero or more bytes, the optional Data Item's payload, or "the data"; `byte[L] Data`
+				the bytes must conform Data Items' specific DId's requirements (see each DId's doc for details)
 
 
 	// Messages as code [byte-packed little-endian structs]:
 	struct TDataItem {
 		__u16	DId;
-		__u8	Length;
+		__u16	Length;
 		__u8[Length] Data; // conceptually, a union with per-DId "parameter structs"
 	}
 
 	struct TMessage {
 		__u8	MId;
-		__u16	Length;
+		__u32	Length;
 		__u8[Length] Payload; // conceptually a TDataItem[]
 		__u8	Checksum;
 	}
@@ -94,114 +95,14 @@ Messages can generate three categories of Errors: "Syntax Errors", "Semantic Err
 	A Response to a Message that encountered one or more Operational Errors during execution will result in an "E" Response Message,
 		with one TDataItem in the E Reponse per TDataItem in the Message, but the TDataItem generated for TDataItems that encountered
 		Operational Errors will so indicate via a special DId.
+---
+	TMessages and TDataItems and such all use "smart pointers", in many cases unique_ptr<> (and I'm wanting to move more of the
+	shared_ptr<> to unique_ptr<> in the future but lack the experience to simply grok the impact on my code/algorithm/structure)
 
 
 TODO: implement a good TError replacement
 TODO: finish writing the descendants of TDataItem.  See validateDataItemPayload()'s comments below
 */
-
-/*[aioenetd Protocol 2 TCP-Listener/Server Daemon/Service implementation and concept notes]
-from discord code-review conversation with Daria; these do not belong in this source file:
-	your "the main loop" == "my worker thread that dequeues Actions";
-	your "exploding" == "my Object factory construction";
-	You've moved "my Object construction" into a single-threaded spot, "the main loop", from where I have it, in an
-	individual socket's receive-thread.
-	Because I have multiple receive threads it isn't nearly as necessary to "be fast": the TCP Stack will queue bytes for me.
-	Because my error-checking location (the parser, the exploder, .FromBytes()) is in a socket-specific (ie client-specific)
-	thread it is harder for fuzzed bytes sent over TCP to affect other clients or the device as a whole.
-	Because my worker and all receive threads share a thread-safe std::queue<> everything is serialized nicely.
-
-	By putting 66% of the error checking, syntax AND semantic (but not operational errors, eg hardware timeouts) into the
-	receive threads — and in fact, into the TMessage constructor, I am guaranteed all TMessage Objects are valid and safe
-	to submit to the worker thread, thus less likely to cause errors in that single-thread / single-point-of-failure
-	(and make the worker execution faster, as it is "my single thread" and thus bottleneck)
------
-	A TMessage is constructed from received bytes by `auto aMessage = TMessage::fromBytes(buf);`, or an "X" Response TMessage with
-	syntax error details gets returned, instead.
-	Either way, the constructed TMessage is pushed into the Action Queue.
-	The asynchronous worker thread pops a TMessage off the Action Queue, does a `for(aDataItem : aMessage.Payload){aDataItem.Go()}`,
-	and either modifies-in-place and sends the TMessage as a reply or constructs and sends a new TMessage as the reply,
-	the TMessage(s) then goes out of scope and deallocates
------
-	The TMessage library needs to handle syntax errors, mistakes in the *format* of a bytestream, and semantic errors, mistakes
-	in the *content* of the received bytes.  Some categoriese of semantic errors, however, are specific to a particular model of eNET-
-	device, let alone specific to a model Family.
-
-	Consider ADC_GetChannelV(iChannel): iChannel is valid if (0 <= iChannel <= 15), right?  Nope, not "generally": this is only true
-	for the ~12 models in the base Family, eNET-AIO16-16F, eNET-AI12-16E, etc.  But eNET- devices, and therefore Protocol 2 devices
-	intended to operate via this TMessage library and the aioenetd implementation, include the DPK and DPK M Families; this means:
-	iChannel is valid if (0 <= iChannel <= highestAdcChan), and highestAdcChan is 15, 31, 63, 96, or 127; depending on the specific
-	model running aioenetd/using this library.
-
-	So, to catch Semantic errors of this type (invalid channel parameter in an ADC_GetChannelV() TDataItem) the parser must "know"
-	the value of "highestAdcChan" for the model it is running on.
-
-	The sum of all things that the parser needs to know to handle semantic error checking, specific to the model running the library,
-	are encapsulated as "getters" in a HAL.  The list is quite long as there are a LOT of variations built out of the eNET-AIO design.
-
-	These "getters" *could* be implemented in a static, compile-time, manner.  Consider a device_specific.h file that has a bunch of
-	eg `#define highestAdcChan 31`-type constants defined.  However, this is a "write it for 1" approach, and would require loading a
-	different TMessage library binary for every model, as the binary is effectively hard-coded for a specific device's needs.
-
-	The USB FWE2.0 firmwares are almost this simplistic in their approach to a HAL: there is a device_specific.h, but there is also a
-	run-time operation that introspects the DeviceID and tweaks some constants, like the friendly_model_name string, to a model-specific
-	value.  This run-time operation is a hard-coded switch(DeviceId){}, and thus is implemented per Firmware (but allows one Firmware
-	to run, as a binary, on any models built from the same or compatible PCB).
-
-	This only works because there are very few variants per firmware source: the USB designs are sufficiently different that reusing
-	firmware is implausible: it would require a *real* HAL implementation (one that abstracted every pin on the FX2, and every
-	register that could ever exist on the external address/data bus).
-
-	We're going for a better approach to the HAL in this library.
-
-	TBD, LOL
-
-	The library implementation, today (2022-07-21 @ 10:55am Pacific), only checks for Semantic errors in the one DId that's been
-	implemented; REG_Read1(offset).  This DId uses a helper function hardcoded in the source called `WidthFromOffset(offset)`,
-	which returns one of 0, 8, or 32, indicating "invalid offset", "offset is a valid 8-bit register", or "offset is a valid
-	32-bit register", respectively.  In theory it should be able to respond "16" as well, but the eNET-AIO, in all of its models,
-	has no 16-bit registers.  This is an instance where the HAL is weak; "WidthFromOffset()" shouldn't be hard-coded; it should
-	be able to respond accurately about whatever device it is running on (or perhaps even whatever device it is asked about).
-
-	One way to accomplish this would be loading configuration information tables from nonvolatile on-device storage.  "tables",
-	here, is plural not to refer to both a hypothetical single table needed for WidthFromOffset() and all the other tables for
-	supporting other HAL-queriables, but to express that WidthFromOffset() *alone* needs several tables, if it is to support
-	the general case.  Sure, eNET-AIO only has registers that can each only be correctly accessed at a specific bit width (ie it is
-	unsafe or impossible to successfully read or write 8 bits from any eNET-AIO 32-bit register), but many ACCES devices do not
-	have this limitation; most devices support 8, 16, or 32-bit access to any register or group thereof (as long as offsets are
-	width-aligned; eg 32-bit operations require that offset % 4 == 0).  WidthFromOffset() therefore becomes complex, and
-	declaratively describing each device's capabilities and restrictions is also complex.
-
-	Another approach would be to implement a "HAL interface" (C++ calls an interface an Abstract Base Class or ABC) which the library
-	would use to access the needed polymorphisms via a device-specific TDeviceHAL object it is provided ("Dependency Injection").
-	Every TDeviceHAL descendant would provide not-less-than a set of device-specific constants like `highestAdcChan` from the
-	introduction example.  Better would be to also include "verbs" that implement generic operations as needed for the specific
-	device, like an ADC_SetRange1(iChannel, rangeSpan), but this level of interface is incredibly complex, in any generic form.
-
-	Consider the RA1216 which expects the ADC input range to be specified as a voltage span code plus an offset in ±16-bit counts;
-
-	This is an extreme example, an outlier; an example that forces "the most general case" to be handled ... but this is merely the
-	outlier in the "ADC RangeCode" axis.  Consider the RAD242 which has a 24-bit ADC, the AD8-16 which has an 8-bit ADC, the
-	USB-DIO-32I which has 1 bit per I/O Group instead of the typical 8 or 4 bits — there are *many* axes of outliers, and they all
-	become necessary to handle if you try to make a truly generic library/HAL interface.
-
-	This is why "Universal Libraries" (like National provides) are so big and difficult to code against.
-
-	Thus, "Protocol 2" is designed to be slightly generic, but more importantly, extensible.
-
-
-	Similar to
-	the simplistic #include "device_specific.h" "#define" approach, but supporting run-time selection of which "{modelUID}.h" is
-	used.
-
-
-
-
----
-	TMessages and TDataItems and such all use "smart pointers", in many cases unique_ptr<> (and I'm wanting to move more of the
-	shared_ptr<> to unique_ptr<> in the future but lack the experience to simply grok the impact on my code/algorithm/structure)
-
- */
 
 #include <memory>
 #include <iostream>
@@ -218,7 +119,6 @@ extern int apci; // global handle to device file for DAQ circuit on which to per
 #define minimumMessageLength (__u32)(sizeof(TMessageHeader) + sizeof(TCheckSum))
 #pragma region utility functions / templates < >
 
-
 #define s_print(s, ...)              \
 	{                                \
 		if (s)                       \
@@ -227,16 +127,15 @@ extern int apci; // global handle to device file for DAQ circuit on which to per
 			printf(__VA_ARGS__);     \
 	}
 
-
 int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
-#define printBytes(dest, intro, buf, crlf)                               \
-	{                                                                    \
-		dest << intro;                                                   \
-		for (auto byt : buf)                                             \
-			dest << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " ";  \
-		if (crlf)                                                        \
-			dest << endl;                                                \
+#define printBytes(dest, intro, buf, crlf)                                                       \
+	{                                                                                            \
+		dest << intro;                                                                           \
+		for (auto byt : buf)                                                                     \
+			dest << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " "; \
+		if (crlf)                                                                                \
+			dest << endl;                                                                        \
 	}
 
 // Template class to slice a vector from range Start to End
@@ -294,14 +193,11 @@ std::string to_hex(T i)
 
 // throw exception if conditional is false
 inline void
-GUARD(	bool allGood, TError resultcode, int intInfo,
-		int Line = __builtin_LINE(), const char *File = __builtin_FILE(), const char *Func = __builtin_FUNCTION() )
+GUARD(bool allGood, TError resultcode, int intInfo,
+	  int Line = __builtin_LINE(), const char *File = __builtin_FILE(), const char *Func = __builtin_FUNCTION())
 {
 	if (!(allGood))
-		throw std::logic_error(std::string(File)
-		 + ": " + std::string(Func)
-         + "(" + std::to_string(Line) + "): "
-         + std::to_string(resultcode) + " = " + to_hex(intInfo));
+		throw std::logic_error(std::string(File) + ": " + std::string(Func) + "(" + std::to_string(Line) + "): " + std::to_string(resultcode) + " = " + to_hex(intInfo));
 }
 
 // return register width for given offset as defined for eNET-AIO registers
@@ -322,7 +218,7 @@ int widthFromOffset(int ofs);
 class TDataItem
 {
 public:
-// 1) Deserialization: methods used when converting byte vectors into objects
+	// 1) Deserialization: methods used when converting byte vectors into objects
 
 	// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
 	// .fromBytes() would typically be called by TMessage::fromBytes();
@@ -342,7 +238,7 @@ public:
 	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
 	virtual TBytes AsBytes();
 
-// 2) Serialization: methods for source to generate TDataItems, typically for "Response Messages"
+	// 2) Serialization: methods for source to generate TDataItems, typically for "Response Messages"
 
 	// zero-"Data" data item constructor
 	TDataItem(DataItemIds DId);
@@ -367,7 +263,7 @@ public:
 	// this is an explicit class-specific .fromBytes(), which the class method .fromBytes() will invoke for NYI DIds etc
 	TDataItem(TBytes bytes);
 
-// 3) Verbs -- things used when *executing* the TDataItem Object
+	// 3) Verbs -- things used when *executing* the TDataItem Object
 public:
 	// intended to be overriden by descendants it performs the query/config operation and sets instance state as appropriate
 	virtual TDataItem &Go();
@@ -377,8 +273,7 @@ public:
 	// ADC_GetImmediateScanV() might be an array of single precision floating point Volts
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 
-
-// 4) Diagnostic / Debug - methods typically used for implementation debugging
+	// 4) Diagnostic / Debug - methods typically used for implementation debugging
 public:
 	// returns human-readable string representing the DataItem and its payload; normally used by TMessage.AsString()
 	virtual std::string AsString();
@@ -405,27 +300,27 @@ public:
 #pragma region class TREG_Read1 : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
 class TREG_Read1 : public TDataItem
 {
-// 1) Deserialization
+	// 1) Deserialization
 public:
 	// called by TDataItem::fromBytes() via DIdList association with DId
 	TREG_Read1(TBytes bytes);
 
-// 2) Serialization: For creating Objects to be turned into bytes
+	// 2) Serialization: For creating Objects to be turned into bytes
 public:
 	// constructor of choice for source; all parameters included. TODO: ? make overloadable
 	TREG_Read1(DataItemIds DId, int ofs);
 	TREG_Read1() = default;
 	virtual TBytes AsBytes();
-	TREG_Read1 & setOffset(int ofs);
+	TREG_Read1 &setOffset(int ofs);
 
-// 3) Verbs
+	// 3) Verbs
 public:
 	virtual TREG_Read1 &Go();
 	virtual TError getResultCode();
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
-// 4) Diagnostic
+	// 4) Diagnostic
 	virtual std::string AsString();
 
 public:
@@ -441,17 +336,14 @@ private:
 class TDIdWriteRegister : public TDataItem
 {
 public:
-
 };
 #pragma endregion
 #pragma region "DAC Output"
 class TDIdDacOutput : public TDataItem
 {
-	public:
+public:
 };
 #pragma endregion
-
-
 
 #pragma region class TMessage declaration
 class TMessage
@@ -481,7 +373,7 @@ public:
 public:
 	TMessage() = default;
 	TMessage(TMessageId MId);
-	TMessage(TMessageId MId,TPayload Payload);
+	TMessage(TMessageId MId, TPayload Payload);
 	/*
 	 * This function parses a vector<byte> that is supposed to be an entire Message
 	 * and returns a TMessage Object if no Syntax Errors were encountered.
@@ -505,7 +397,8 @@ protected:
 #pragma endregion TMessage declaration
 
 // utility template to turn class into base-class-pointer-to-instance-on-heap
-template <class X> std::unique_ptr<TDataItem> construct() { return std::unique_ptr<TDataItem>(new X); }
+template <class X>
+std::unique_ptr<TDataItem> construct() { return std::unique_ptr<TDataItem>(new X); }
 
 typedef std::unique_ptr<TDataItem> DIdConstructor();
 

@@ -348,12 +348,14 @@ TBytes TDataItem::AsBytes()
 		bytes.push_back(DId & 0x000000FF);
 		DId >>= 8;
 	}
-	int siz = this->Data.size();
-	if (siz > 255)
-	{
-		printf("this = %p siz=%d\n", this, siz);
+
+	TDataItemLength len = this->Data.size();
+	for (int i=0; i < (sizeof(TDataItemLength)); i++){
+		__u8 lsb = len & 0xFF;
+		bytes.push_back(lsb);
+		len >>= 8;
 	}
-	bytes.push_back(siz);
+
 	bytes.insert(end(bytes), begin(Data), end(Data));
 	return bytes;
 }
@@ -430,13 +432,9 @@ TError TREG_Read1::getResultCode()
 
 std::shared_ptr<void> TREG_Read1::getResultValue()
 {
-	switch (this->width)
-	{
-	case 8:
-		return std::shared_ptr<__u8>(new __u8(this->Value));
-	case 32:
-		return std::shared_ptr<__u32>(new __u32(this->Value));
-	}
+return this->width == 8
+					? (std::shared_ptr<void>) std::shared_ptr<__u8>(new __u8(this->Value))
+					: (std::shared_ptr<void>) std::shared_ptr<__u32>(new __u32(this->Value));
 }
 
 TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
@@ -748,7 +746,7 @@ TMessage &TMessage::addDataItem(PTDataItem item)
 
 TBytes TMessage::AsBytes()
 {
-	__u16 payloadLength = 0;
+	TMessagePayloadSize payloadLength = 0;
 
 	for (auto item : this->DataItems)
 	{
@@ -757,12 +755,14 @@ TBytes TMessage::AsBytes()
 	}
 	TBytes bytes;
 
-	__u8 msb = (payloadLength >> 8) & 0xFF;
-	__u8 lsb = payloadLength & 0xFF;
-	bytes.push_back(this->Id); /// WARN: only works because TMessageID == __u8
-	// printf("Message ID == %02X, payloadLength == %hd, LSB(PLen)=%hhd MSB=%hhd\n", Id, payloadLength, lsb, msb);
-	bytes.push_back(lsb);
-	bytes.push_back(msb);
+	bytes.push_back(this->Id);
+
+	for (int i=0; i < (sizeof(TMessagePayloadSize)); i++){
+		__u8 lsb = payloadLength & 0xFF;
+		bytes.push_back(lsb);
+		payloadLength >>= 8;
+	}
+
 	for (auto item : this->DataItems)
 	{
 		TBytes byt = item->AsBytes();
