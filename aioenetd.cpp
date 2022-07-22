@@ -364,6 +364,7 @@ int main(int argc, char *argv[])
 
 		// If something happened on the master socket then it is a new incoming connection
 		if (FD_ISSET(master_socket, &readfds))
+		// TODO: FIX: this condition should spawn a new read-thread
 		{
 			if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
 			{
@@ -379,7 +380,8 @@ int main(int argc, char *argv[])
 			ClientList.push_back(new_socket);
 		}
 
-		// else its some IO operation on some other socket // FIX: should be handled by each read-thread
+		// else its some IO operation on some other socket
+		// TODO: FIX: should be handled by each read-thread
 		for (auto aClient : ClientList)
 		{
 			if (FD_ISSET( sd , &readfds))
