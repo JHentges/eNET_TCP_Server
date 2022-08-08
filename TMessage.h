@@ -137,9 +137,9 @@ int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 	{                                                                                            \
 		dest << intro;                                                                           \
 		for (auto byt : buf)                                                                     \
-			dest << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " "; \
+			dest << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " "; \
 		if (crlf)                                                                                \
-			dest << endl;                                                                        \
+			dest << std::endl;                                                                        \
 	}
 
 // Template class to slice a vector from range Start to End
@@ -208,6 +208,7 @@ GUARD(bool allGood, TError resultcode, int intInfo,
 // returns 0 if offset is invalid
 int widthFromOffset(int ofs);
 #pragma endregion utility functions and templates
+
 /*	The following classes (TDataItem and its descendants) try to use a consistent convention
 	for the order Methods are listed
 
@@ -227,7 +228,23 @@ public:
 	// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
 	// .fromBytes() would typically be called by TMessage::fromBytes();
 	static PTDataItem fromBytes(TBytes msg, TError &result);
-
+	void pushDId(TBytes & buf)
+	{
+		TDataId DId = this->Id;
+		for (int i = 0; i < sizeof(DId); i++)
+		{
+			buf.push_back(DId & 0x000000FF);
+			DId >>= 8;
+		}
+	}
+	static void pushLen(TBytes & buf, TDataItemLength len)
+	{
+		for (int i = 0; i < sizeof(len); i++)
+		{
+			buf.push_back(len & 0x000000FF);
+			len >>= 8;
+		}
+	}
 	// this block of methods are typically used by ::fromBytes() to syntax-check the byte vector
 	static int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 	static int isValidDataItemID(DataItemIds DataItemID);
@@ -240,7 +257,7 @@ public:
 	static int getDIdIndex(DataItemIds DId);
 
 	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
-	virtual TBytes AsBytes();
+	virtual TBytes AsBytes(bool bAsReply=false);
 
 	// 2) Serialization: methods for source to generate TDataItems, typically for "Response Messages"
 
@@ -279,9 +296,9 @@ public:
 
 	// 4) Diagnostic / Debug - methods typically used for implementation debugging
 public:
-	// returns human-readable string representing the DataItem and its payload; normally used by TMessage.AsString()
-	virtual std::string AsString();
-	// used by .AsString() to fetch the human-readable name/description of the DId (from DIdList[].Description)
+	// returns human-readable string representing the DataItem and its payload; normally used by TMessage.AsString(bAsReply)
+	virtual std::string AsString(bool bAsReply=false);
+	// used by .AsString(bAsReply) to fetch the human-readable name/description of the DId (from DIdList[].Description)
 	virtual std::string getDIdDesc();
 	// class method to get the human-readable name/description of any known DId; TODO: should maybe be a method of DIdList[]
 	static std::string getDIdDesc(DataItemIds DId);
@@ -299,22 +316,24 @@ class TDataItemNYI : public TDataItem
 {
 public:
 	TDataItemNYI() = default;
+	TDataItemNYI(TBytes buf) : TDataItem::TDataItem{buf}{};
 };
 #pragma endregion
+
 #pragma region class TREG_Read1 : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
 class TREG_Read1 : public TDataItem
 {
 	// 1) Deserialization
 public:
 	// called by TDataItem::fromBytes() via DIdList association with DId
-	TREG_Read1(TBytes bytes);
+	TREG_Read1(TBytes data);
 
 	// 2) Serialization: For creating Objects to be turned into bytes
 public:
 	// constructor of choice for source; all parameters included. TODO: ? make overloadable
 	TREG_Read1(DataItemIds DId, int ofs);
-	TREG_Read1() = default;
-	virtual TBytes AsBytes();
+	TREG_Read1();
+	virtual TBytes AsBytes(bool bAsReply=false);
 	TREG_Read1 &setOffset(int ofs);
 
 	// 3) Verbs
@@ -325,7 +344,7 @@ public:
 	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
 	// 4) Diagnostic
-	virtual std::string AsString();
+	virtual std::string AsString(bool bAsReply = false);
 
 public:
 	int offset{0};
@@ -340,12 +359,14 @@ private:
 class TDIdWriteRegister : public TDataItem
 {
 public:
+	TDIdWriteRegister(TBytes buf) : TDataItem::TDataItem{buf}{};
 };
 #pragma endregion
 #pragma region "DAC Output"
 class TDIdDacOutput : public TDataItem
 {
 public:
+	TDIdDacOutput(TBytes buf) : TDataItem::TDataItem{buf}{};
 };
 #pragma endregion
 
@@ -374,6 +395,16 @@ public:
 	// TODO: figure out F or f for the name
 	static TMessage FromBytes(TBytes buf, TError &result);
 
+	static void pushLen(TBytes & buf, TMessagePayloadSize len)
+	{
+		for (int i = 0; i < (sizeof(len)); i++)
+		{
+			__u8 lsb = len & 0xFF;
+			buf.push_back(lsb);
+			len >>= 8;
+		}
+	}
+
 public:
 	TMessage() = default;
 	TMessage(TMessageId MId);
@@ -387,24 +418,29 @@ public:
 
 public:
 	TMessageId getMId();
-	TCheckSum getChecksum();
+	TCheckSum getChecksum(bool bAsReply = false);
 	TMessage &setMId(TMessageId MId);
 	TMessage &addDataItem(PTDataItem item);
 
-	TBytes AsBytes();
-	std::string AsString();
+	TBytes AsBytes(bool bAsReply = false);
+	std::string AsString(bool bAsReply = false);
 
+public:
+	TPayload DataItems;
 protected:
 	TMessageId Id;
-	TPayload DataItems;
 };
 #pragma endregion TMessage declaration
 
-// utility template to turn class into base-class-pointer-to-instance-on-heap
-template <class X>
-std::unique_ptr<TDataItem> construct() { return std::unique_ptr<TDataItem>(new X); }
+// utility template to turn class into (base-class)-pointer-to-instance-on-heap, so derived class gets called
+template <class X> std::unique_ptr<TDataItem> construct_old() { return std::unique_ptr<TDataItem>(new X); }
+//typedef std::unique_ptr<TDataItem> DIdConstructor();
+// typedef struct {
+// 	DIdConstructor *Construct; // = construct<TREG_Read1> or = construct<TDataItem> or whatnot
+// } TDIdListEntry;
 
-typedef std::unique_ptr<TDataItem> DIdConstructor();
+template <class X> std::unique_ptr<TDataItem> construct(TBytes FromBytes) { return std::unique_ptr<TDataItem>(new X(FromBytes)); }
+typedef std::unique_ptr<TDataItem> DIdConstructor(TBytes FromBytes);
 
 typedef struct
 {
@@ -417,3 +453,12 @@ typedef struct
 } TDIdListEntry;
 
 extern TDIdListEntry const DIdList[];
+
+
+namespace log__ {
+	const int aioDEBUG = 1;
+	const int aioINFO = 2;
+	const int aioWARN = 4;
+	const int aioERROR = 8;
+	const int aioTRACE = 16;
+}

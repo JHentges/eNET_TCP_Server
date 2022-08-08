@@ -27,11 +27,11 @@ int widthFromOffset(int ofs)
 		w = 8;
 	else if ((ofs <= 0xDC) && (ofs % 4 == 0))
 		w = 32;
-	return w;
+    return w;
 }
 
 // DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
-#define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d "(NYI)"}
+#define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d " (NYI)"}
 TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
@@ -164,12 +164,15 @@ int TDataItem::validateDataItemPayload(DataItemIds DId, TBytes Data)
 	int result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
 	int index = TDataItem::getDIdIndex(DId);
 	TDataItemLength len = Data.size();
-	// printf("validateDataItemPayload(%04X, ", DId);
-	// printBytes(cout, "", Data, 0);
-	// printf(") : %d <= %d <= %d\n", getMinLength(DId), len, getMaxLength(DId));
+	//printf("validateDataItemPayload(%04X, ", DId);
+	//printBytes(cout, "", Data, 0);
+	//printf(") : %d <= %d <= %d: ", getMinLength(DId), len, getMaxLength(DId));
 	if ((TDataItem::getMinLength(DId) <= len) && (len <= TDataItem::getMaxLength(DId)))
 	{
 		result = ERR_SUCCESS;
+		//printf("Valid\n");
+	}else {
+		//printf("INVALID\n");
 	}
 
 	return result;
@@ -243,6 +246,7 @@ int TDataItem::validateDataItem(TBytes msg)
 		Data.erase(Data.cbegin(), Data.cbegin() + sizeof(TDataItemHeader));
 		result = validateDataItemPayload(Id, Data);
 	}
+	//cout << "validateDataItem status: " << result << ", " << err_msg[-result] << endl;
 	return result;
 }
 
@@ -250,43 +254,58 @@ int TDataItem::validateDataItem(TBytes msg)
 PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 {
 	result = ERR_SUCCESS;
-	// printBytes(cout, "TDataItem::fromBytes received = ", msg, true);
+	//printBytes(cout, "TDataItem::fromBytes() received = ", msg, true);
 
 	GUARD((msg.size() >= sizeof(TDataItemHeader)), ERR_MSG_DATAITEM_TOO_SHORT, msg.size());
 
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
 	GUARD(isValidDataItemID(head->DId), ERR_DId_INVALID, head->DId);
-
-	TDataItemLength DataSize = head->dataLength; // MessageLength
+	//cout << "TDataItem::fromBytes() got DId: " << setw(4) << hex << head->DId << endl;
 
 	PTDataItem anItem;
-	if (DataSize == 0)
+	TDataItemLength DataSize = head->dataLength; // MessageLength
+	if (DataSize == 0){
+		//cout << "TDataItem::fromBytes() found 0 Data, calling TDataItem(" << setw(4) << hex << head->DId << ")" << endl;
 		return PTDataItem(new TDataItem(head->DId)); // no data in this data item is valid
+	}else
+		cout << "TDataItem::fromBytes() found head->dataLength == " << DataSize << endl;
+
 	TBytes data;
 	data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
 
 	result = validateDataItemPayload(head->DId, data);
-	if (result != ERR_SUCCESS)
+	if (result != ERR_SUCCESS){
+		//cout << "TDataItem::fromBytes() failed validateDataItemPayload with status: " << result << ", " << err_msg[-result] << endl;
 		return PTDataItem(new TDataItem());
-
+	}
 	for (auto entry : DIdList)
-		if (entry.DId == head->DId)
-			return entry.Construct();
+		if (entry.DId == head->DId){
+			//return entry.Construct();
+			//cout << "TDataItem::fromBytes() found matching DId in DIdList and is calling .Construct(data)" << endl;
 
+			auto item = entry.Construct(data);
+
+			//cout << "TDataItem::fromBytes().Construct made this: " << item->AsString() << endl;
+			return item;
+		}
 	return PTDataItem(new TDataItem(head->DId, data));
 }
 #pragma endregion
 
-TDataItem::TDataItem() : TDataItem{DataItemIds(_INVALID_DATAITEMID_)} {};
+TDataItem::TDataItem() : TDataItem{DataItemIds(_INVALID_DATAITEMID_)} {
+	//cout << "TDataItem() called" << endl;
+};
 
 TDataItem::TDataItem(DataItemIds DId)
 {
+	//cout << "TDataItem(DId = " << setw(2) << hex << DId << ") called" << endl;
 	this->setDId(DId);
 };
 
 // parses vector of bytes (presumably received across TCP socket) into a TDataItem
 TDataItem::TDataItem(TBytes bytes) : TDataItem()
 {
+	//printBytes(cout, "TDataItem(TBytes = ", bytes, 1);
 	TError result = ERR_SUCCESS;
 	GUARD(bytes.size() < sizeof(TDataItemHeader), ERR_MSG_DATAITEM_TOO_SHORT, bytes.size());
 
@@ -318,6 +337,7 @@ TDataItem &TDataItem::setDId(DataItemIds DId)
 {
 	GUARD(isValidDataItemID(DId), ERR_MSG_DATAITEM_ID_UNKNOWN, DId);
 	this->Id = DId;
+	//cout << "setDId(" << setw(4) << hex << this->Id << ")" << endl;
 	return *this;
 }
 
@@ -339,24 +359,14 @@ bool TDataItem::isValidDataLength()
 	return result;
 }
 
-TBytes TDataItem::AsBytes()
+TBytes TDataItem::AsBytes(bool bAsReply)
 {
 	TBytes bytes;
-	TDataId DId = this->getDId();
-	for (int i = 0; i < sizeof(DId); i++)
-	{
-		bytes.push_back(DId & 0x000000FF);
-		DId >>= 8;
-	}
-
-	TDataItemLength len = this->Data.size();
-	for (int i=0; i < (sizeof(TDataItemLength)); i++){
-		__u8 lsb = len & 0xFF;
-		bytes.push_back(lsb);
-		len >>= 8;
-	}
+	this->pushDId(bytes);
+	this->pushLen(bytes, this->Data.size());
 
 	bytes.insert(end(bytes), begin(Data), end(Data));
+	//printBytes(std::cout, "TDataItem::AsBytes built: ", bytes, 1);
 	return bytes;
 }
 
@@ -366,12 +376,12 @@ string TDataItem::getDIdDesc()
 }
 
 // returns human-readable, formatted (multi-line) string version of this TDataItem
-string TDataItem::AsString()
+string TDataItem::AsString(bool bAsReply)
 {
 	stringstream dest;
 
-	// dest << "DataItem = DId:" << setfill('0') << hex << uppercase << setw(sizeof(TDataId) * 2) << this->getDId()
-	// 	 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ", ";
+	dest << "DataItem = DId:" << setfill('0') << hex << uppercase << setw(sizeof(TDataId) * 2) << this->getDId()
+		 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ":   ";
 
 	dest << "DataItem = " << this->getDIdDesc() << ", ";
 
@@ -453,23 +463,27 @@ TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 
 TREG_Read1::TREG_Read1(DataItemIds DId, int ofs)
 {
+	//cout << "TREG_Read1(DataItemIds DId, int ofs) called" << endl;
 	// printf("! DIAG: DId passed to TREG_Read1 constructor was %04X, ofs=%02X\n", DId, ofs);
-	this->setDId(DId);
+	this->setDId(REG_Read1);
 	this->setOffset(ofs);
 }
 
-TREG_Read1::TREG_Read1(TBytes bytes)
+TREG_Read1::TREG_Read1()
+{	//cout << "TREG_Read1() called" << endl;
+	this->setDId(REG_Read1);
+}
+
+TREG_Read1::TREG_Read1(TBytes data)
 {
-	TDataItemHeader *head = (TDataItemHeader *)bytes.data();
-	TDataId DId = head->DId;
-	// printf("! DIAG: DId passed to TREG_Read1 constructor(TBytes) was %04X\n", DId);
-	GUARD(DId != DataItemIds::REG_Read1, ERR_DId_INVALID, DId);
-	TBytes data(bytes.cbegin() + sizeof(TDataItemHeader), bytes.cend());
+	//printBytes(cout, "TREG_Read1(TBytes) was passed: ", data, 1);
+	this->setDId(REG_Read1);
+
 	TError result = ERR_SUCCESS;
 	GUARD(data.size() == 1, ERR_DId_BAD_PARAM, data.size());
 	this->offset = data[0];
 	int w = widthFromOffset(offset);
-	GUARD(w != 0, ERR_DId_BAD_PARAM, DId);
+	GUARD(w != 0, ERR_DId_BAD_PARAM, REG_Read1);
 	this->width = w;
 }
 
@@ -483,22 +497,32 @@ TREG_Read1 &TREG_Read1::setOffset(int ofs)
 	return *this;
 }
 
-TBytes TREG_Read1::AsBytes()
+TBytes TREG_Read1::AsBytes(bool bAsReply)
 {
 	TBytes bytes;
-	TDataId DId = this->getDId();
-	for (int i = 0; i < sizeof(TDataId); i++)
-	{
-		bytes.push_back(DId & 0x000000FF);
-		DId >>= 8;
+	this->pushDId(bytes);
+	int w = 1;
+	if (bAsReply)
+		w += this->width / 8;
+	this->pushLen(bytes, w);
+	bytes.push_back(this->offset);
+
+	if (bAsReply){
+		auto value = this->getResultValue();
+		__u32 v = *((__u32 *)value.get());
+		for (int i=0; i<this->width/8; i++)
+		{
+			bytes.push_back(v & 0x000000FF);
+			v >>= 8;
+		}
 	}
 
-	bytes.push_back(1); // payload is one byte, so push "1" for the size
-	bytes.push_back(this->offset);
+	//printBytes(std::cout, "TREG_Read1::AsBytes built: ", bytes, 1);
+
 	return bytes;
 }
 
-string TREG_Read1::AsString()
+string TREG_Read1::AsString(bool bAsReply)
 {
 	stringstream dest;
 	dest << "DataItem = " << this->getDIdDesc() << " [";
@@ -507,6 +531,12 @@ string TREG_Read1::AsString()
 	else
 		dest << this->width;
 	dest << " bit] from Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset);
+	if (bAsReply)
+	{
+		auto value = this->getResultValue();
+		__u32 v = *((__u32 *)value.get());
+		dest << "; register read: " << hex << setw(this->width / 8 * 2) << v;
+	}
 	return dest.str();
 }
 #pragma endregion
@@ -651,20 +681,20 @@ TPayload TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &re
 TMessage TMessage::FromBytes(TBytes buf, TError &result)
 {
 	result = ERR_SUCCESS;
-	// printBytes(cout, "TMessage::FromBytes received = ", buf, true);
+	//printBytes(cout, "TMessage::FromBytes received = ", buf, true);
 
 	auto siz = buf.size();
 	if (siz < minimumMessageLength)
 	{
 		result = ERR_MSG_TOO_SHORT;
-		printf("FromBytes: Message Size < minimumMessageLength (%ld < %d\n", siz, minimumMessageLength);
+		printf("TMessage::FromBytes: Message Size < minimumMessageLength (%ld < %d\n", siz, minimumMessageLength);
 		return TMessage(_INVALID_MESSAGEID_); // NAK(received insufficient data, yet) until more data (the rest of the Message/header) received?
 	}
 	TMessageHeader *head = (TMessageHeader *)buf.data();
 
 	if (!isValidMessageID(head->type))
 	{
-		cout << "FromBytes() detected invalid MId: " << head->type << endl;
+		//cout << "TMessage::FromBytes: detected invalid MId: " << head->type << endl;
 		result = ERR_MSG_ID_UNKNOWN; // NAK(invalid MessageID Category byte)
 		return TMessage();
 	}
@@ -687,12 +717,12 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 	if (__valid_checksum__ != checksum)
 	{
 		result = ERR_MSG_CHECKSUM; // NAK(invalid checksum)
-		printf("FromBytes: invalid checksum\n");
+		printf("TMessage::FromBytes: invalid checksum\n");
 		return TMessage();
 	}
 
 	TMessage message = TMessage(head->type, dataItems);
-	// printf("FromBytes: TMessage constructed...data items has %ld items\n", message.DataItems.size());
+	//printf("TMessage::FromBytes: TMessage constructed...Payload has %ld items\n", message.DataItems.size());
 	return message;
 }
 
@@ -724,9 +754,9 @@ TMessageId TMessage::getMId()
 	return this->Id;
 }
 
-TCheckSum TMessage::getChecksum()
+TCheckSum TMessage::getChecksum(bool bAsReply)
 {
-	return TMessage::calculateChecksum(this->AsBytes());
+	return TMessage::calculateChecksum(this->AsBytes(bAsReply));
 }
 
 TMessage &TMessage::setMId(TMessageId ID)
@@ -744,14 +774,14 @@ TMessage &TMessage::addDataItem(PTDataItem item)
 	return *this;
 }
 
-TBytes TMessage::AsBytes()
+TBytes TMessage::AsBytes(bool bAsReply)
 {
 	TMessagePayloadSize payloadLength = 0;
 
 	for (auto item : this->DataItems)
 	{
-		payloadLength += item->AsBytes().size();
-		// printf("item.AsBytes().size() == %ld, payloadLength == %d\n", item.AsBytes().size(), payloadLength);
+		payloadLength += item->AsBytes(bAsReply).size();
+		//printf("item.AsBytes(bAsReply).size() == %ld, payloadLength == %d\n", item->AsBytes(bAsReply).size(), payloadLength);
 	}
 	TBytes bytes;
 
@@ -765,24 +795,26 @@ TBytes TMessage::AsBytes()
 
 	for (auto item : this->DataItems)
 	{
-		TBytes byt = item->AsBytes();
+		TBytes byt = item->AsBytes(bAsReply);
 		bytes.insert(end(bytes), begin(byt), end(byt));
 	}
 
 	TCheckSum csum = -calculateChecksum(bytes);
 	bytes.push_back(csum); // WARN: only works because TCheckSum == __u8
+	printBytes(std::cout, "TMessage::AsBytes built: ", bytes, 1);
+
 	return bytes;
 }
 
-string TMessage::AsString()
+string TMessage::AsString(bool bAsReply)
 {
 	stringstream dest;
-	TBytes raw = this->AsBytes();
+	TBytes raw = this->AsBytes(bAsReply);
 #if 0
 	dest << "Raw: ";
 	for (auto byt : raw)
 	{
-		dest << "0x" << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " ";
+		dest  << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " ";
 	}
 	dest << endl;
 #endif
@@ -793,7 +825,7 @@ string TMessage::AsString()
 		{
 			PTDataItem item = this->DataItems[itemNumber];
 			dest << endl
-				 << "    " << item->AsString();
+				 << "    " << item->AsString(bAsReply);
 		}
 		// for (TDataItem item : this->DataItems)
 		// {

@@ -259,7 +259,7 @@ void *sender_thread(void *arg)
 
 static void sig_handler(int sig)
 {
-	printf("signal %d detected; exiting", sig);
+	printf("signal %d detected; exiting\n\n", sig);
 
 	close(apci);
 
@@ -268,8 +268,8 @@ static void sig_handler(int sig)
 //---------------------End signal -----------------------
 
 std::vector<int>ClientList;
-TBytes buffer;
-
+TBytes buf;
+	char buffer[1025];  //data buffer of 1K
 int main(int argc, char *argv[])
 {
 	signal(SIGINT, sig_handler);
@@ -289,9 +289,9 @@ int main(int argc, char *argv[])
 		printf("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file\n");
 	}
 
-	buffer.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
+	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
 
-	bool opt = true;
+	int opt = 1;
 	int master_socket , addrlen , new_socket , activity, i , valread , sd;
 	struct sockaddr_in address;
 
@@ -309,8 +309,7 @@ int main(int argc, char *argv[])
 
 	//set master socket to allow multiple connections ,
 	//this is just a good habit, it will work without this
-	if( setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt,
-		  sizeof(opt)) < 0 )
+	if( setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )
 	{
 		perror("setsockopt");
 		exit(EXIT_FAILURE);
@@ -356,7 +355,7 @@ int main(int argc, char *argv[])
 		// TODO: FIX: shouldn't block; main run-loop should act as a watchdog and do logging or whatnot
 		// WAS: activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL); but I've removed mx_sd
 		//      while refactoring int client_socket[30]; int max_clients = 30; into vector<int> ClientList
-		activity = select( ClientList.size(), &readfds , NULL , NULL , NULL);
+		activity = select( 1023, &readfds , NULL , NULL , NULL);
 		if ((activity < 0) && (errno != EINTR))
 		{
 			printf("select error");
@@ -379,21 +378,20 @@ int main(int argc, char *argv[])
 			std::cout << "Adding to list of sockets as " << ClientList.size() << std::endl;
 			ClientList.push_back(new_socket);
 		}
-
-		// else its some IO operation on some other socket
+	// else its some IO operation on some other socket
 		// TODO: FIX: should be handled by each read-thread
 		for (auto aClient : ClientList)
 		{
-			if (FD_ISSET( sd , &readfds))
+			if (FD_ISSET( aClient, &readfds))
 			{
 				// Read the incoming message
-				valread = read( aClient , buffer.data(), buffer.capacity());
+				valread = read( aClient , buffer, 1024);
 
 				// if zero bytes were read, close the socket // FIX: should terminate the read-thread
 				if (valread == 0) {
-					// Somebody disconnected , get his details and print
+					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
-					printf("Host disconnected , ip %s , listen_port %d \n" ,
+					printf("Host disconnected, ip %s , listen_port %d \n" ,
 						  inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
 
 					//Close the socket and mark as 0 in list for reuse
@@ -410,13 +408,38 @@ int main(int argc, char *argv[])
 					try
 					{
 						TError result;
-						auto aMessage = TMessage::FromBytes(buffer, result);
-						std::cout << aMessage.AsString() << std::endl;
-						TBytes buf = aMessage.AsBytes();
-						int bytesSent = send(aClient, buf.data(), buf.size(), 0);
+						buf.clear();
+						for (int i = 0; i < valread; i++)
+							buf.push_back(buffer[i]);
+						//buf.assign(buffer, buffer + valread); // turn buffer into TBytes
+
+						printf("\nReceived TBytes buf.size()= %ld\n", buf.size());
+
+						auto aMessage = TMessage::FromBytes(buf, result);
+						if (result != ERR_SUCCESS)
+						{
+							printf("error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
+							continue;
+						}
+						std::cout << "received Message: " << aMessage.AsString() << std::endl
+								  << std::endl;
+
+						for (auto anItem : aMessage.DataItems)
+						{
+							anItem->Go(); // modifies contents of aMessage based on results of .Go()
+						}
+
+						std::cout << "Built Reply Message: " << aMessage.AsString(true) << std::endl;
+
+						TBytes rbuf = aMessage.AsBytes(true);
+						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
 						{
+							printf("\n\n! TCP Send of Reply appears to have failed\n\n");
 							// handle xmit error
+						}else
+						{
+							printf("sent successfully %d bytes\n\n", bytesSent);
 						}
 					}
 					catch(std::logic_error e)
@@ -430,4 +453,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
