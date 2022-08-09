@@ -158,6 +158,14 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 #pragma endregion
 
 #pragma pack(push, 1)
+typedef struct {
+	__u8 offset;
+	__u8 width;
+	__u32 value;
+} REG_Write;
+
+typedef std::vector<REG_Write> REG_WriteList;
+
 typedef struct
 {
 	TMessageId type;

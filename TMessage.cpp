@@ -40,7 +40,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(REG_ReadAll),
 	DIdNYI(REG_ReadSome),
 	DIdNYI(REG_ReadBuf),
-	{REG_Write1, 2, 5, 5, construct<TDIdWriteRegister>, "REG_Write1(__u8 offset, [__u8 or __u32] value)"},
+	{REG_Write1, 2, 5, 5, construct<TREG_Write1>, "REG_Write1(__u8 offset, [__u8 or __u32] value)"},
 	DIdNYI(REG_WriteSome),
 	DIdNYI(REG_WriteBuf),
 	DIdNYI(REG_ClearBits),
@@ -268,8 +268,9 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 		//cout << "TDataItem::fromBytes() found 0 Data, calling TDataItem(" << setw(4) << hex << head->DId << ")" << endl;
 		return PTDataItem(new TDataItem(head->DId)); // no data in this data item is valid
 	}else
-		cout << "TDataItem::fromBytes() found head->dataLength == " << DataSize << endl;
-
+	{
+		//cout << "TDataItem::fromBytes() found head->dataLength == " << DataSize << endl;
+	}
 	TBytes data;
 	data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
 
@@ -361,6 +362,7 @@ bool TDataItem::isValidDataLength()
 
 TBytes TDataItem::AsBytes(bool bAsReply)
 {
+	//cout << "TDataItem::AsBytes(" << bAsReply << ") called" << std::endl;
 	TBytes bytes;
 	this->pushDId(bytes);
 	this->pushLen(bytes, this->Data.size());
@@ -404,7 +406,7 @@ TDataItem &TDataItem::Go()
 
 TError TDataItem::getResultCode()
 {
-	return 0;
+	return this->resultCode;
 }
 
 std::shared_ptr<void> TDataItem::getResultValue()
@@ -423,22 +425,22 @@ std::shared_ptr<void> TDataItem::getResultValue()
 
 TREG_Read1 &TREG_Read1::Go()
 {
+	this->Value = 0;
 	switch (this->width)
 	{
 	case 8:
 		this->resultCode = apci_read8(apci, 0, BAR_REGISTER, this->offset, (__u8*)&this->Value);
+		// cout << "apci_read8("<<hex <<this->offset << ") got " << this->Value << endl;
 		break;
 	case 32:
 		this->resultCode = apci_read32(apci, 0, BAR_REGISTER, this->offset, &this->Value);
+		// cout << "apci_read32("<<hex <<this->offset << ") got " << this->Value << endl;
 		break;
 	}
 	return *this;
 }
 
-TError TREG_Read1::getResultCode()
-{
-	return this->resultCode;
-}
+
 
 std::shared_ptr<void> TREG_Read1::getResultValue()
 {
@@ -479,7 +481,6 @@ TREG_Read1::TREG_Read1(TBytes data)
 	//printBytes(cout, "TREG_Read1(TBytes) was passed: ", data, 1);
 	this->setDId(REG_Read1);
 
-	TError result = ERR_SUCCESS;
 	GUARD(data.size() == 1, ERR_DId_BAD_PARAM, data.size());
 	this->offset = data[0];
 	int w = widthFromOffset(offset);
@@ -535,12 +536,110 @@ string TREG_Read1::AsString(bool bAsReply)
 	{
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
-		dest << "; register read: " << hex << setw(this->width / 8 * 2) << v;
+		if (this->width == 8){
+			dest << "; register read: " << hex << setw(2) << (v & 0x000000FF);
+		}
+		else
+		{
+			dest << "; register read: " << hex << setw(8) << v;
+		}
 	}
 	return dest.str();
 }
 #pragma endregion
 
+#pragma region TREG_Writes implementation
+TREG_Writes &TREG_Writes::addWrite(__u8 w, int ofs, __u32 value)
+{
+	REG_Write aWrite;
+	aWrite.width = w;
+	aWrite.offset = ofs;
+	aWrite.value = value;
+	this->Writes.push_back(aWrite);
+	return *this;
+}
+
+TREG_Writes &TREG_Writes::Go()
+{
+	for(auto action : this->Writes)
+		switch (action.width)
+		{
+		case 8:
+			this->resultCode |= apci_write8(apci, 0, BAR_REGISTER, action.offset, (__u8)(action.value & 0x000000FF));
+			break;
+		case 32:
+			this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
+			break;
+		}
+	return *this;
+}
+string TREG_Writes::AsString(bool bAsReply)
+{
+	stringstream dest;
+	dest << "DataItem = " << this->getDIdDesc();
+	for (auto aWrite : this->Writes)
+	{
+		dest << " [";
+		if (aWrite.width == 8)
+			dest << " " << aWrite.width;
+		else
+			dest << aWrite.width;
+		dest << " bit] write to Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(aWrite.offset);
+		__u32 v = aWrite.value;
+		dest << " with value = " << hex << setw(aWrite.width / 8 * 2) << v;
+	}
+	return dest.str();
+}
+#pragma endregion TREG_Writes
+
+#pragma region TREG_Write1 implementation
+TREG_Write1::TREG_Write1()
+{
+	this->setDId(REG_Write1);
+}
+
+TREG_Write1::TREG_Write1(TBytes buf)
+{
+	this->setDId(REG_Write1);
+	GUARD(buf.size() > 0, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
+	__u8 ofs = buf[0];
+	int w = widthFromOffset(ofs);
+	GUARD(w != 0, ERR_DId_BAD_OFFSET, ofs);
+	GUARD(w == 8 ? (buf.size() == 2) : (buf.size() == 5), ERR_DId_BAD_PARAM, buf.size());
+
+	__u32 value = 0;
+	if (w == 8)
+		value = *(__u8 *)&buf[1];
+	else
+		value = *(__u32 *)&buf[1];
+
+	this->addWrite(w, ofs, value);
+}
+
+TBytes TREG_Write1::AsBytes(bool bAsReply)
+{
+	// cout << "TREG_Write1::AsBytes("<< bAsReply << ") called" << std::endl;
+
+	TBytes bytes;
+	this->pushDId(bytes);
+	int w = 1 + this->Writes[0].width / 8;
+	this->pushLen(bytes, w);
+	if (this->Writes.size() > 0 )
+		bytes.push_back(this->Writes[0].offset);
+	else
+		cout << "ERROR: nothing in Write[] queue" << std::endl;
+
+	__u32 v = this->Writes[0].value;
+	for (int i = 0; i < this->Writes[0].width / 8; i++)
+	{
+		cout << "." << std::endl;
+		bytes.push_back(v & 0x000000FF);
+		v >>= 8;
+	}
+	return bytes;
+}
+
+#pragma endregion
 
 
 #pragma region TMessage implementation
@@ -777,7 +876,7 @@ TMessage &TMessage::addDataItem(PTDataItem item)
 TBytes TMessage::AsBytes(bool bAsReply)
 {
 	TMessagePayloadSize payloadLength = 0;
-
+	//cout << "About to dump Message.DataItems[].AsBytes" << std::endl;
 	for (auto item : this->DataItems)
 	{
 		payloadLength += item->AsBytes(bAsReply).size();
@@ -787,7 +886,7 @@ TBytes TMessage::AsBytes(bool bAsReply)
 
 	bytes.push_back(this->Id);
 
-	for (int i=0; i < (sizeof(TMessagePayloadSize)); i++){
+	for (int i=0; i < (sizeof(TMessagePayloadSize)); i++){ // push message payload length
 		__u8 lsb = payloadLength & 0xFF;
 		bytes.push_back(lsb);
 		payloadLength >>= 8;
@@ -801,7 +900,7 @@ TBytes TMessage::AsBytes(bool bAsReply)
 
 	TCheckSum csum = -calculateChecksum(bytes);
 	bytes.push_back(csum); // WARN: only works because TCheckSum == __u8
-	printBytes(std::cout, "TMessage::AsBytes built: ", bytes, 1);
+	//printBytes(std::cout, "TMessage::AsBytes built: ", bytes, 1);
 
 	return bytes;
 }
@@ -809,16 +908,21 @@ TBytes TMessage::AsBytes(bool bAsReply)
 string TMessage::AsString(bool bAsReply)
 {
 	stringstream dest;
+	cout << "about to dump the bytes of the message" << std::endl;
 	TBytes raw = this->AsBytes(bAsReply);
-#if 0
+#if 1
 	dest << "Raw: ";
+	cout << "Raw: ";
 	for (auto byt : raw)
 	{
 		dest  << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " ";
+		cout  << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(byt) << " ";
 	}
 	dest << endl;
+	cout << endl;
 #endif
 	dest << "Message = MId:" << this->getMId() << ", DataItems: " << DataItems.size();
+	cout << "Message = MId:" << this->getMId() << ", DataItems: " << DataItems.size();
 	if (DataItems.size() != 0)
 	{
 		for (int itemNumber = 0; itemNumber < DataItems.size(); itemNumber++)
@@ -826,6 +930,9 @@ string TMessage::AsString(bool bAsReply)
 			PTDataItem item = this->DataItems[itemNumber];
 			dest << endl
 				 << "    " << item->AsString(bAsReply);
+			cout << endl
+				 << "    " << item->AsString(bAsReply);
+
 		}
 		// for (TDataItem item : this->DataItems)
 		// {
@@ -835,6 +942,9 @@ string TMessage::AsString(bool bAsReply)
 	}
 	dest << endl
 		 << "    Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
+	cout << endl
+		 << "    Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
+
 	return dest.str();
 }
 

@@ -422,8 +422,9 @@ int main(int argc, char *argv[])
 							continue;
 						}
 						std::cout << "received Message: " << aMessage.AsString() << std::endl
-								  << std::endl;
+								  << "------" << std::endl;
 
+						printf("Executing Message DataItems[].Go(), %d total items:\n", aMessage.DataItems.size());
 						for (auto anItem : aMessage.DataItems)
 						{
 							anItem->Go(); // modifies contents of aMessage based on results of .Go()

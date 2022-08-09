@@ -80,8 +80,8 @@ TError test(TBytes Msg, const char *TestDescription, TError expectedResult = ERR
 
 int main(void) // "TEST"
 {
-    logtest();
-    return 0;
+    // logtest();
+    // return 0;
 
     try
     {
@@ -89,63 +89,64 @@ int main(void) // "TEST"
         __u16 len;
         printf("Testing ");
         printf("\n-----------------------------------\n");
-
-        TMessageId MId_Q = 'Q';
-        TMessage M1 = TMessage(MId_Q);
-        cout << M1.AsString() << endl;
-        test(M1.AsBytes(), "TMessage(Q)");
-
-        TMessageId MId_R = 'R';
-        TPayload Payload;
-        PTDataItem d2 = unique_ptr<TDataItem>(new TDataItem((DataItemIds)0));
-        Payload.push_back(d2);
-        TMessage M2 = TMessage(MId_R, Payload);
-        cout << M2.AsString() << endl;
-        test(M2.AsBytes(), "buildMessage() with Payload");
-
-        DataItemIds DId = (DataItemIds)0;
-        PTDataItem d1 = unique_ptr<TDataItem>(new TDataItem(DId, d2->AsBytes()));
-        Payload.push_back(d1);
-        TMessage M3 = TMessage(MId_Q, Payload);
-        cout << M3.AsString() << endl;
-        test(M3.AsBytes(), "buildMessage() with two DataItems, one with Data");
-
-        M3.addDataItem(d1).addDataItem(d2);
-        cout << M3.AsString() << endl;
-        test(M3.AsBytes(), "addDataItem(TDataItem)");
-
         TMessageId MId_C = 'C';
         TMessage Message = TMessage(MId_C);
-        PTDataItem item(new TDataItem(DataItemIds::BRD_Reset));
+        std::shared_ptr<TREG_Write1>  item(new TREG_Write1());
+        item->addWrite(8, 0x17, 0x01);
         Message.addDataItem(item);
         cout << Message.AsString() << endl;
-        test(Message.AsBytes(), "TMessage(BRD_Reset())", ERR_SUCCESS);
+        test(Message.AsBytes(), "TMessage(REG_Write1(+0x17, 0x01))", ERR_SUCCESS);
 
-        cout << "TEST addDataItem(TDIdReadRegister) with offset +20 (that's a 32-bit wide register)" << endl;
-        std::shared_ptr<TREG_Read1> read32(new TREG_Read1(DataItemIds::REG_Read1, 0x20));
-        Message.addDataItem(read32);
-        cout << Message.AsString() << endl;
+        // TMessageId MId_Q = 'Q';
+        // TMessage M1 = TMessage(MId_Q);
+        // cout << M1.AsString() << endl;
+        // test(M1.AsBytes(), "TMessage(Q)");
 
-        cout << "----------------------" << endl;
-        cout << "TEST addDataItem(TDIdReadRegister) (from +1, 8-bit)" << endl;
-        std::shared_ptr<TREG_Read1> read8(new TREG_Read1(DataItemIds::REG_Read1, +0x01));
-        Message.addDataItem(read8);
-        cout << Message.AsString() << endl;
+        // TMessageId MId_R = 'R';
+        // TPayload Payload;
+        // PTDataItem d2 = unique_ptr<TDataItem>(new TDataItem((DataItemIds)0));
+        // Payload.push_back(d2);
+        // TMessage M2 = TMessage(MId_R, Payload);
+        // cout << M2.AsString() << endl;
+        // test(M2.AsBytes(), "buildMessage() with Payload");
 
-        TError res;
-        cout << "----------------------" << endl;
-        cout << "TEST FromBytes() [serdes round-trip test] of above " << endl;
-        TMessage aMsg = TMessage::FromBytes(Message.AsBytes(), res);
+        // DataItemIds DId = (DataItemIds)0;
+        // PTDataItem d1 = unique_ptr<TDataItem>(new TDataItem(DId, d2->AsBytes()));
+        // Payload.push_back(d1);
+        // TMessage M3 = TMessage(MId_Q, Payload);
+        // cout << M3.AsString() << endl;
+        // test(M3.AsBytes(), "buildMessage() with two DataItems, one with Data");
 
-        cout << "res = " << res << res << ", built aMsg without excepting" << endl
-             << "---- confirm the following text is identical to the prior:" << endl;
-        cout << aMsg.AsString() << endl;
+        // M3.addDataItem(d1).addDataItem(d2);
+        // cout << M3.AsString() << endl;
+        // test(M3.AsBytes(), "addDataItem(TDataItem)");
 
-        cout << "----------------------" << endl;
-        item->addData(7).addData(8);
 
-        cout << Message.AsString() << endl;
-        test(Message.AsBytes(), "TMessage(BRD_Reset(7,8) (should be (void)))", ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH);
+        // cout << "TEST addDataItem(TDIdReadRegister) with offset +20 (that's a 32-bit wide register)" << endl;
+        // std::shared_ptr<TREG_Read1> read32(new TREG_Read1(DataItemIds::REG_Read1, 0x20));
+        // Message.addDataItem(read32);
+        // cout << Message.AsString() << endl;
+
+        // cout << "----------------------" << endl;
+        // cout << "TEST addDataItem(TDIdReadRegister) (from +1, 8-bit)" << endl;
+        // std::shared_ptr<TREG_Read1> read8(new TREG_Read1(DataItemIds::REG_Read1, +0x01));
+        // Message.addDataItem(read8);
+        // cout << Message.AsString() << endl;
+
+        // TError res;
+        // cout << "----------------------" << endl;
+        // cout << "TEST FromBytes() [serdes round-trip test] of above " << endl;
+        // TMessage aMsg = TMessage::FromBytes(Message.AsBytes(), res);
+
+        // cout << "res = " << res << res << ", built aMsg without excepting" << endl
+        //      << "---- confirm the following text is identical to the prior:" << endl;
+        // cout << aMsg.AsString() << endl;
+
+        // cout << "----------------------" << endl;
+        // item->addData(7).addData(8);
+
+        // cout << Message.AsString() << endl;
+        // test(Message.AsBytes(), "TMessage(BRD_Reset(7,8) (should be (void)))", ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH);
     }
     catch (logic_error e)
     {

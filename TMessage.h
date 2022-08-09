@@ -217,6 +217,19 @@ int widthFromOffset(int ofs);
 	3) Verbs: stuff associated with using Objects as Actions, and the results thereof
 	4) diagnostic, debug, or otherwise "Rare" stuff, like .AsString()
 */
+
+/*
+	I am considering an abstract descendant of TDataItem that would sit between it and TREG_ operations and
+	quite plausibly between it and *most* DAQ-related DId classes (a "mezzanine" abstract class):
+	"TREG_Writes : TDataItem" or similar, it would provide a vector of this->offset and this->value fields to
+	represent "a list of one or more register writes" (a parallel class might support lists of reads).
+
+	The actual "concrete" descendants of these two mezzanine classes (like REG_Write1() and ADC_SetConfig()) would
+	parse the buf and fill in the script.  "Go()" would not be re-implemented, just the parsing (and .AsString()/.AsBytes())
+
+	A different mezzanine class could be a "read modify write register bits" layer
+*/
+
 #pragma region class TDataItem declaration
 
 // Base class for all TDataItems, descendants of which will handle payloads specific to the DId
@@ -326,6 +339,7 @@ class TREG_Read1 : public TDataItem
 	// 1) Deserialization
 public:
 	// called by TDataItem::fromBytes() via DIdList association with DId
+	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 	TREG_Read1(TBytes data);
 
 	// 2) Serialization: For creating Objects to be turned into bytes
@@ -339,9 +353,7 @@ public:
 	// 3) Verbs
 public:
 	virtual TREG_Read1 &Go();
-	virtual TError getResultCode();
 	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
-	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
 	// 4) Diagnostic
 	virtual std::string AsString(bool bAsReply = false);
@@ -355,13 +367,35 @@ private:
 };
 
 #pragma endregion
-#pragma region class TDIdWriteRegister : TDataItem for REG_Write1 "Write Register Value"
-class TDIdWriteRegister : public TDataItem
+
+#pragma region class TREG_Writes declaration
+// ABSTRACT base class for TREG_Write and related functionality (eg ADC_SetConfig(), DAC_WriteAll())
+class TREG_Writes : public TDataItem
 {
-public:
-	TDIdWriteRegister(TBytes buf) : TDataItem::TDataItem{buf}{};
+	public:
+		TREG_Writes() = default;
+		TREG_Writes(TBytes buf);
+		virtual TREG_Writes &Go();
+		TREG_Writes &addWrite(__u8 w, int ofs, __u32 value);
+		virtual std::string AsString(bool bAsReply);
+
+	protected:
+		REG_WriteList Writes;
 };
 #pragma endregion
+
+#pragma region class TREG_Write1 : TDataItem for REG_Write1 "Write Register Value"
+class TREG_Write1 : public TREG_Writes
+{
+public:
+	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
+	TREG_Write1();
+	TREG_Write1(TBytes buf);
+	virtual TBytes AsBytes(bool bAsReply=false);
+	//virtual std::string AsString(bool bAsReply=false);
+};
+#pragma endregion
+
 #pragma region "DAC Output"
 class TDIdDacOutput : public TDataItem
 {
