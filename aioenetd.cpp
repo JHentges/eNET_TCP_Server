@@ -268,8 +268,8 @@ static void sig_handler(int sig)
 //---------------------End signal -----------------------
 
 std::vector<int>ClientList;
-TBytes buf;
-	char buffer[1025];  //data buffer of 1K
+TBytes buf; char buffer[1025];  //data buffer of 1K // TODO: FIX: there shouldn't be both a byte array and a vector; resolve
+
 int main(int argc, char *argv[])
 {
 	signal(SIGINT, sig_handler);
@@ -454,3 +454,18 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+
+
+
+
+
+
+/*
+        case 'Z':
+            status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
+            terminate = 0;
+
+            pthread_create(&worker_thread, NULL, &worker_main, &conn);
+            apci_start_dma(apci);
+            break;
+			*/
