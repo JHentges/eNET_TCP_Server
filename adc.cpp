@@ -30,22 +30,22 @@
 
 #include "eNET-AIO.h"
 #include "apcilib.h"
-
-#define RING_BUFFER_SLOTS 255
-#define DMA_BUFF_SIZE (BYTES_PER_TRANSFER * RING_BUFFER_SLOTS)
+#include "adc.h"
 
 static uint32_t ring_buffer[RING_BUFFER_SLOTS][SAMPLES_PER_TRANSFER];
 
-volatile static int terminate;
+volatile int terminate;
 
-pthread_t logger_thread;
 pthread_t worker_thread;
+pthread_t logger_thread;
 
 pthread_mutex_t mutex;
 sem_t empty;
 sem_t full;
 
 bool done = false;
+int AdcStreamingConnection = -1;
+
 
 void *log_main(void *arg)
 {
@@ -66,6 +66,8 @@ void *log_main(void *arg)
 		ring_read_index %= RING_BUFFER_SLOTS;
 	};
 }
+
+
 
 void *worker_main(void *arg)
 {
@@ -112,8 +114,7 @@ void *worker_main(void *arg)
 			{
 				sem_wait(&empty);
 				pthread_mutex_lock(&mutex);
-				memcpy(ring_buffer[(first_slot + i) % RING_BUFFER_SLOTS],
-					   mmap_addr + (BYTES_PER_TRANSFER * ((first_slot + i) % RING_BUFFER_SLOTS)),
+				memcpy(ring_buffer[(first_slot + i) % RING_BUFFER_SLOTS], ((__u8 *)mmap_addr + (BYTES_PER_TRANSFER * ((first_slot + i) % RING_BUFFER_SLOTS))),
 					   BYTES_PER_TRANSFER);
 				pthread_mutex_unlock(&mutex);
 				sem_post(&full);
@@ -123,8 +124,10 @@ void *worker_main(void *arg)
 	}
 	catch(std::exception e)
 	{
-		printf(e.what());
+		printf("%s\n", e.what());
 	}
 	pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);
+	return 0;
+
 }

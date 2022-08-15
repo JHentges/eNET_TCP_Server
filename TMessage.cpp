@@ -1,5 +1,7 @@
+#include <unistd.h>
 #include <cstdlib>
 #include <stdexcept>
+#include <thread>
 using namespace std;
 
 #include "TMessage.h"
@@ -7,6 +9,7 @@ using namespace std;
 
 #include "apcilib.h"
 #include "eNET-AIO.h"
+#include "adc.h"
 
 const vector<TMessageId> ValidMessageIDs{
 // to server
@@ -121,6 +124,9 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(ADC_Raw1),
 	DIdNYI(ADC_RawAll),
 	DIdNYI(ADC_RawSome),
+
+	{ADC_StreamStart, 0, 0, 0, construct<TADC_StreamStart>, "ADC_StreamStart()"},
+	{ADC_StreamStop, 0, 0, 0, construct<TADC_StreamStop>, "ADC_StreamStop()"},
 
 	DIdNYI(ADC_Streaming_stuff_including_Hz_config),
 
@@ -334,6 +340,11 @@ TDataItem &TDataItem::addData(__u8 aByte)
 	return *this;
 }
 
+TDataItem &TDataItem::setConnection(int aClient)
+{
+	this->conn = aClient;
+}
+
 TDataItem &TDataItem::setDId(DataItemIds DId)
 {
 	GUARD(isValidDataItemID(DId), ERR_MSG_DATAITEM_ID_UNKNOWN, DId);
@@ -462,6 +473,8 @@ TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 
 	return result;
 };
+
+
 
 TREG_Read1::TREG_Read1(DataItemIds DId, int ofs)
 {
@@ -640,6 +653,44 @@ TBytes TREG_Write1::AsBytes(bool bAsReply)
 }
 
 #pragma endregion
+
+#pragma region "ADC Stuff"
+TBytes TADC_StreamStart::AsBytes(bool bAsReply=false){};
+TADC_StreamStart &TADC_StreamStart::Go()
+{
+	if (-1 == AdcStreamingConnection)
+	{
+		throw logic_error(err_msg[ERR_ADC_BUSY]);
+	}
+	AdcStreamingConnection = this->conn;
+
+	auto status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
+	if (status)
+	{
+		printf("Error setting apci_dma_transfer_size=%d\n", status);
+		throw logic_error(err_msg[-status]);
+	}
+	//initAdc();
+	terminate = 0;
+
+	pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
+	sleep(1);
+	apci_start_dma(apci);
+};
+std::shared_ptr<void> TADC_StreamStart::getResultValue(){}; // TODO: fix; think this through
+std::string TADC_StreamStart::AsString(bool bAsReply = false){};
+
+
+TBytes TADC_StreamStop::AsBytes(bool bAsReply=false){};
+TADC_StreamStop &TADC_StreamStop::Go()
+{
+
+};
+std::shared_ptr<void> TADC_StreamStop::getResultValue(){}; // TODO: fix; think this through
+std::string TADC_StreamStop::AsString(bool bAsReply = false){};
+
+#pragma endregion "ADC"
+
 
 
 #pragma region TMessage implementation
@@ -847,7 +898,13 @@ TMessage::TMessage(TBytes Msg)
 	if (result != ERR_SUCCESS)
 		throw logic_error(err_msg[-result]);
 };
-
+TMessage &TMessage::setConnection(int aClient)
+{
+	this->conn = aClient;
+	for(auto anItem : this->DataItems)
+		anItem.setConnection(aClient);
+	return *this;
+}
 TMessageId TMessage::getMId()
 {
 	return this->Id;

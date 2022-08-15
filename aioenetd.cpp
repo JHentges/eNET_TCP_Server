@@ -421,10 +421,11 @@ int main(int argc, char *argv[])
 							printf("error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
 							continue;
 						}
+						aMessage.setConnection(aClient);
 						std::cout << "received Message: " << aMessage.AsString() << std::endl
 								  << "------" << std::endl;
 
-						printf("Executing Message DataItems[].Go(), %d total items:\n", aMessage.DataItems.size());
+						printf("Executing Message DataItems[].Go(), %ld total items:\n", aMessage.DataItems.size());
 						for (auto anItem : aMessage.DataItems)
 						{
 							anItem->Go(); // modifies contents of aMessage based on results of .Go()

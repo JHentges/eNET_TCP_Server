@@ -142,9 +142,14 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	ADC_RawAll,
 	ADC_RawSome,
 
+	ADC_Stream = 0x1100,
+	ADC_StreamStart,
+	ADC_StreamStop,
+
 	ADC_Streaming_stuff_including_Hz_config, // TODO: finish
 
 	// TODO: DIds below this point are TBD/notional
+	SCRIPT_ = 0x3000,
 	SCRIPT_Pause, // insert a pause in execution of TDataItems
 
 	// broken out from "BRD_stuff_needed_for_control_and_diagnostics_of_Linux_TCPIP_WDG_DEF_ETC" mentioned above

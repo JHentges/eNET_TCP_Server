@@ -24,6 +24,8 @@
 #define ERR_DId_BAD_OFFSET -11
 #define ERR_DId_INVALID -12
 #define ERR_NYI -13
+#define ERR_ADC_BUSY -14
+#define ERR_ADC_FATAL -15
 extern const char *err_msg[];
 typedef __u32 TError;
 

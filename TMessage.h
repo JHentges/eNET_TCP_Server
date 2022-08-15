@@ -218,19 +218,7 @@ int widthFromOffset(int ofs);
 	4) diagnostic, debug, or otherwise "Rare" stuff, like .AsString()
 */
 
-/*
-	I am considering an abstract descendant of TDataItem that would sit between it and TREG_ operations and
-	quite plausibly between it and *most* DAQ-related DId classes (a "mezzanine" abstract class):
-	"TREG_Writes : TDataItem" or similar, it would provide a vector of this->offset and this->value fields to
-	represent "a list of one or more register writes" (a parallel class might support lists of reads).
-
-	The actual "concrete" descendants of these two mezzanine classes (like REG_Write1() and ADC_SetConfig()) would
-	parse the buf and fill in the script.  "Go()" would not be re-implemented, just the parsing (and .AsString()/.AsBytes())
-
-	A different mezzanine class could be a "read modify write register bits" layer
-*/
-
-#pragma region class TDataItem declaration
+#pragma region "class TDataItem" declaration
 
 // Base class for all TDataItems, descendants of which will handle payloads specific to the DId
 class TDataItem
@@ -241,6 +229,21 @@ public:
 	// factory fromBytes() instantiates appropriate (sub-)class of TDataItem via DIdList[]
 	// .fromBytes() would typically be called by TMessage::fromBytes();
 	static PTDataItem fromBytes(TBytes msg, TError &result);
+
+	// this block of methods are typically used by ::fromBytes() to syntax-check the byte vector
+	static int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
+	static int isValidDataItemID(DataItemIds DataItemID);
+	static int validateDataItem(TBytes msg);
+	static TDataItemLength getMinLength(DataItemIds DId);
+	static TDataItemLength getTargetLength(DataItemIds DId);
+	static TDataItemLength getMaxLength(DataItemIds DId);
+
+	// index into DIdList; TODO: kinda belongs in a DIdList class method...
+	static int getDIdIndex(DataItemIds DId);
+	TDataItem &setConnection(int connection);
+	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
+	virtual TBytes AsBytes(bool bAsReply=false);
+
 	void pushDId(TBytes & buf)
 	{
 		TDataId DId = this->Id;
@@ -258,20 +261,6 @@ public:
 			len >>= 8;
 		}
 	}
-	// this block of methods are typically used by ::fromBytes() to syntax-check the byte vector
-	static int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
-	static int isValidDataItemID(DataItemIds DataItemID);
-	static int validateDataItem(TBytes msg);
-	static TDataItemLength getMinLength(DataItemIds DId);
-	static TDataItemLength getTargetLength(DataItemIds DId);
-	static TDataItemLength getMaxLength(DataItemIds DId);
-
-	// index into DIdList; TODO: kinda belongs in a DIdList class method...
-	static int getDIdIndex(DataItemIds DId);
-
-	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
-	virtual TBytes AsBytes(bool bAsReply=false);
-
 	// 2) Serialization: methods for source to generate TDataItems, typically for "Response Messages"
 
 	// zero-"Data" data item constructor
@@ -319,12 +308,13 @@ public:
 protected:
 	TBytes Data;
 	TError resultCode;
+	int conn;
 
 private:
 	DataItemIds Id{0};
 };
 #pragma endregion TDataItem declaration
-#pragma region class TDataItemNYI declaration
+#pragma region "class TDataItemNYI" declaration
 class TDataItemNYI : public TDataItem
 {
 public:
@@ -333,7 +323,7 @@ public:
 };
 #pragma endregion
 
-#pragma region class TREG_Read1 : TDataItem for DataItemIds::REG_Read1 "Read Register Value"
+#pragma region "class TREG_Read1 : TDataItem" for DataItemIds::REG_Read1 "Read Register Value"
 class TREG_Read1 : public TDataItem
 {
 	// 1) Deserialization
@@ -368,7 +358,7 @@ private:
 
 #pragma endregion
 
-#pragma region class TREG_Writes declaration
+#pragma region "class TREG_Writes declaration"
 // ABSTRACT base class for TREG_Write and related functionality (eg ADC_SetConfig(), DAC_WriteAll())
 class TREG_Writes : public TDataItem
 {
@@ -384,7 +374,7 @@ class TREG_Writes : public TDataItem
 };
 #pragma endregion
 
-#pragma region class TREG_Write1 : TDataItem for REG_Write1 "Write Register Value"
+#pragma region "class TREG_Write1 : TDataItem" for REG_Write1 "Write Register Value"
 class TREG_Write1 : public TREG_Writes
 {
 public:
@@ -403,6 +393,46 @@ public:
 	TDIdDacOutput(TBytes buf) : TDataItem::TDataItem{buf}{};
 };
 #pragma endregion
+
+#pragma region "ADC Stuff"
+class TADC_StreamStart : public TDataItem
+{
+	// 1) Deserialization
+public:
+	TADC_StreamStart(TBytes buf) : TDataItem::TDataItem{buf}{};
+
+	// 2) Serialization: For creating Objects to be turned into bytes
+public:
+	virtual TBytes AsBytes(bool bAsReply=false);
+
+	// 3) Verbs
+	virtual TADC_StreamStart &Go();
+	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
+
+	// 4) Diagnostic
+	virtual std::string AsString(bool bAsReply = false);
+};
+
+class TADC_StreamStop : public TDataItem
+{
+	// 1) Deserialization
+public:
+	TADC_StreamStop(TBytes buf) : TDataItem::TDataItem{buf}{};
+
+	// 2) Serialization: For creating Objects to be turned into bytes
+public:
+	virtual TBytes AsBytes(bool bAsReply=false);
+
+	// 3) Verbs
+	virtual TADC_StreamStop &Go();
+	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
+
+	// 4) Diagnostic
+	virtual std::string AsString(bool bAsReply = false);
+};
+
+#pragma endregion "ADC"
+
 
 #pragma region class TMessage declaration
 class TMessage
@@ -440,6 +470,7 @@ public:
 	}
 
 public:
+	TMessage &setConnection(int aClient);
 	TMessage() = default;
 	TMessage(TMessageId MId);
 	TMessage(TMessageId MId, TPayload Payload);
@@ -463,6 +494,7 @@ public:
 	TPayload DataItems;
 protected:
 	TMessageId Id;
+	int conn;
 };
 #pragma endregion TMessage declaration
 
