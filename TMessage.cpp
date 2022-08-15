@@ -902,7 +902,7 @@ TMessage &TMessage::setConnection(int aClient)
 {
 	this->conn = aClient;
 	for(auto anItem : this->DataItems)
-		anItem.setConnection(aClient);
+		anItem->setConnection(aClient);
 	return *this;
 }
 TMessageId TMessage::getMId()
