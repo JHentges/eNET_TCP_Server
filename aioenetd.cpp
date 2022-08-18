@@ -381,7 +381,7 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 						for (int i = 0; i < valread; i++)
 							buf.push_back(buffer[i]);
-						Trace("\nReceived " + std::to_string(buf.size()));
+						Trace("[aioenetd] Received " + std::to_string(buf.size())+" bytes");
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
@@ -391,7 +391,7 @@ int main(int argc, char *argv[])
 						}
 						aMessage.setConnection(aClient);
 						Trace("Received Message: " + aMessage.AsString());
-						Log("------");
+						Log("------",true);
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total items");
 						for (auto anItem : aMessage.DataItems)
 						{

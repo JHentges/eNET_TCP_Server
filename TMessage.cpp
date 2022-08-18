@@ -171,7 +171,7 @@ int TDataItem::validateDataItemPayload(DataItemIds DId, TBytes Data)
 	int result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
 	int index = TDataItem::getDIdIndex(DId);
 	TDataItemLength len = Data.size();
-	DebugBytes("DId: " + std::to_string(DId), Data);
+	Debug("DId: " + std::to_string(DId), Data);
 	Debug(std::to_string(getMinLength(DId)) + " <= " + std::to_string(len) + " <= " + std::to_string(getMaxLength(DId)));
 	if ((TDataItem::getMinLength(DId) <= len) && (len <= TDataItem::getMaxLength(DId)))
 	{
@@ -272,7 +272,7 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 {
 	Trace("ENTER");
 	result = ERR_SUCCESS;
-	TraceBytes("Received = ", msg);
+	Trace("Received = ", msg);
 
 	GUARD((msg.size() >= sizeof(TDataItemHeader)), ERR_MSG_DATAITEM_TOO_SHORT, msg.size());
 
@@ -324,7 +324,7 @@ TDataItem::TDataItem(DataItemIds DId)
 TDataItem::TDataItem(TBytes bytes) : TDataItem()
 {
 	Trace("ENTER");
-	TraceBytes("bytes = ", bytes);
+	Trace("bytes = ", bytes);
 	TError result = ERR_SUCCESS;
 	GUARD(bytes.size() < sizeof(TDataItemHeader), ERR_MSG_DATAITEM_TOO_SHORT, bytes.size());
 
@@ -398,7 +398,7 @@ TBytes TDataItem::AsBytes(bool bAsReply)
 	this->pushLen(bytes, this->Data.size());
 
 	bytes.insert(end(bytes), begin(Data), end(Data));
-	DebugBytes("Built: ", bytes);
+	Debug("Built: ", bytes);
 	return bytes;
 }
 
@@ -524,7 +524,7 @@ TREG_Read1::TREG_Read1()
 
 TREG_Read1::TREG_Read1(TBytes data)
 {
-	TraceBytes("ENTER. TBytes: ", data);
+	Trace("ENTER. TBytes: ", data);
 	this->setDId(REG_Read1);
 
 	GUARD(data.size() == 1, ERR_DId_BAD_PARAM, data.size());
@@ -569,7 +569,7 @@ TBytes TREG_Read1::AsBytes(bool bAsReply)
 		}
 	}
 
-	TraceBytes("TREG_Read1::AsBytes built: ", bytes);
+	Trace("TREG_Read1::AsBytes built: ", bytes);
 	return bytes;
 }
 
@@ -710,7 +710,7 @@ TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 	this->pushDId(bytes);
 	int w = 0;
 	this->pushLen(bytes, w);
-	//printBytes(std::cout, "TADC_StreamStart::AsBytes built: ", bytes, 1);
+	Trace("TADC_StreamStart::AsBytes built: ", bytes);
 	return bytes;
 };
 
@@ -726,7 +726,7 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	auto status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
 	if (status)
 	{
-		printf("Error setting apci_dma_transfer_size=%d\n", status);
+		Error("Error setting apci_dma_transfer_size: "+std::to_string(status));
 		throw logic_error(err_msg[-status]);
 	}
 	//initAdc();
@@ -748,7 +748,7 @@ TBytes TADC_StreamStop::AsBytes(bool bAsReply)
 	this->pushDId(bytes);
 	int w = 0;
 	this->pushLen(bytes, w);
-	//printBytes(std::cout, "TADC_StreamStart::AsBytes built: ", bytes, 1);
+	Trace("TADC_StreamStart::AsBytes built: ", bytes);
 	return bytes;
 };
 
@@ -813,7 +813,7 @@ TError TMessage::validatePayload(TBytes Payload)
 	int DataItemSize = sizeof(TDataItemHeader) + head->dataLength;
 	if (DataItemSize > Payload.size())
 	{
-		printf("--ERR: data item thinks it is longer than payload, disize:%d, psize:%ld\n", DataItemSize, Payload.size());
+		Error("--ERR: data item thinks it is longer than payload, disize: " + std::to_string(DataItemSize) +", psize: " + std::to_string(Payload.size()));
 		result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
 	}
 	else
@@ -835,8 +835,7 @@ TError TMessage::validatePayload(TBytes Payload)
 // returns 0 if Message is well-formed
 TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return error condition etc
 {
-	Trace("ENTER");
-	printBytes(cout, "RAW Message:", buf, 1);
+	Trace("ENTER: RAW Message: ", buf);
 	if (buf.size() < minimumMessageLength)
 		return ERR_MSG_TOO_SHORT; // NAK(received insufficient data, yet) until more data (the rest of the Message/header) received?
 
@@ -852,7 +851,7 @@ TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return 
 	TCheckSum checksum = TMessage::calculateChecksum(buf);
 
 	if (__valid_checksum__ != checksum){
-		printf("calculated csum: %02X ERROR should be zero\n", checksum);
+		Error("calculated csum: "+std::to_string(checksum)+" ERROR should be zero\n");
 		return ERR_MSG_CHECKSUM; // NAK(invalid checksum)
 }
 	TBytes payload = buf;
@@ -912,13 +911,13 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 {
 	Trace("ENTER");
 	result = ERR_SUCCESS;
-	printBytes(cout, "TMessage::FromBytes received = ", buf, true);
+	Trace("Received: ", buf);
 
 	auto siz = buf.size();
 	if (siz < minimumMessageLength)
 	{
 		result = ERR_MSG_TOO_SHORT;
-		printf("TMessage::FromBytes: Message Size < minimumMessageLength (%ld < %d\n", siz, minimumMessageLength);
+		Error("Message Size < minimumMessageLength ("+std::to_string(siz)+" < " + std::to_string(minimumMessageLength));
 		return TMessage(_INVALID_MESSAGEID_); // NAK(received insufficient data, yet) until more data (the rest of the Message/header) received?
 	}
 	TMessageHeader *head = (TMessageHeader *)buf.data();
@@ -939,24 +938,24 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 	TPayload dataItems;
 	if (head->payload_size > 0)
 	{
-		cout << "TMessage::FromBytes: Payload is " << head->payload_size << " bytes" << endl;
+		Trace("TMessage::FromBytes: Payload is " + std::to_string(head->payload_size) + " bytes");
 		TBytes payload = buf;
 		payload.erase(payload.cbegin(), payload.cbegin() + sizeof(TMessageHeader));
-		printBytes(cout, "TMessage::FromBytes generated payload: ", payload, true);
+		Trace("TMessage::FromBytes generated payload: ", payload);
 		dataItems = parsePayload(payload, head->payload_size, result);
-		cout << "parsePayload returned " << dataItems.size() << " with resultCode " << result << endl;
+		Trace("parsePayload returned " + std::to_string(dataItems.size()) + " with resultCode " + std::to_string(result));
 	}
 
 	TCheckSum checksum = calculateChecksum(buf);
 	if (__valid_checksum__ != checksum)
 	{
 		result = ERR_MSG_CHECKSUM; // NAK(invalid checksum)
-		printf("TMessage::FromBytes: invalid checksum %02X should be zero\n", checksum);
+		Error("TMessage::FromBytes: invalid checksum "+std::to_string(checksum)+" ERROR should be zero\n");
 		return TMessage();
 	}
 
 	TMessage message = TMessage(head->type, dataItems);
-	//printf("TMessage::FromBytes: TMessage constructed...Payload has %ld items\n", message.DataItems.size());
+	Trace("TMessage::FromBytes: TMessage constructed...Payload DataItem Count: "+ std::to_string(message.DataItems.size()));
 	return message;
 }
 
@@ -1030,7 +1029,6 @@ TBytes TMessage::AsBytes(bool bAsReply)
 	for (auto item : this->DataItems)
 	{
 		payloadLength += item->AsBytes(bAsReply).size();
-		//printf("item.AsBytes(bAsReply).size() == %ld, payloadLength == %d\n", item->AsBytes(bAsReply).size(), payloadLength);
 	}
 	TBytes bytes;
 
@@ -1050,7 +1048,7 @@ TBytes TMessage::AsBytes(bool bAsReply)
 
 	TCheckSum csum = -calculateChecksum(bytes);
 	bytes.push_back(csum); // WARN: only works because TCheckSum == __u8
-	//printBytes(std::cout, "TMessage::AsBytes built: ", bytes, 1);
+	Trace("Built: ", bytes);
 
 	return bytes;
 }
@@ -1060,7 +1058,7 @@ string TMessage::AsString(bool bAsReply)
 	Trace("ENTER");
 	stringstream dest;
 	TBytes raw = this->AsBytes(bAsReply);
-	DebugBytes("TMessage, Raw Bytes: ", raw);
+	Debug("TMessage, Raw Bytes: ", raw);
 	dest << "Message = MId:" << this->getMId() << ", DataItems: " << DataItems.size();
 	if (DataItems.size() != 0)
 	{

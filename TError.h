@@ -120,8 +120,8 @@ int Trace(std::string message, const source_location &loc = source_location::cur
 int Debug(std::string message, const source_location &loc = source_location::current());
 int Error(std::string message, const source_location &loc = source_location::current());
 
-int LogBytes(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-int TraceBytes(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-int DebugBytes(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-int ErrorBytes(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+int Log(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+int Error(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 

@@ -51,7 +51,7 @@ int Error(const std::string message, const source_location &loc)
 	return 0;
 }
 
-int LogBytes(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
+int Log(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
 {
 	std::stringstream msg;
 	msg << intro;
@@ -64,7 +64,7 @@ int LogBytes(const std::string intro, const TBytes bytes, bool crlf, const sourc
 	return 0;
 }
 
-int TraceBytes(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
+int Trace(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
 {
 	std::stringstream msg;
 	msg << intro;
@@ -77,7 +77,7 @@ int TraceBytes(const std::string intro, const TBytes bytes, bool crlf, const sou
 	return 0;
 }
 
-int DebugBytes(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
+int Debug(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
 {
 	std::stringstream msg;
 	msg << intro;
@@ -91,7 +91,7 @@ int DebugBytes(const std::string intro, const TBytes bytes, bool crlf, const sou
 }
 
 
-int ErrorBytes(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
+int Error(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
 {
 	std::stringstream msg;
 	msg << intro;
