@@ -34,7 +34,7 @@
 
 static uint32_t ring_buffer[RING_BUFFER_SLOTS][SAMPLES_PER_TRANSFER];
 
-volatile int terminate;
+volatile int AdcStreamTerminate;
 
 pthread_t worker_thread;
 pthread_t logger_thread;

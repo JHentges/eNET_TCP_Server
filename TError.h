@@ -1,11 +1,41 @@
 #pragma once
 #include <linux/types.h>
-#include <memory>
-#include <string>
-#include <sstream>
-#include <iostream>
+
 
 #include "eNET-types.h"
+
+#define LOGGING_DEFINE_EXTENDED_OUTPUT_TYPE
+
+#include <experimental/source_location>
+using namespace std::experimental;
+
+#include "logging/logging.h"
+//using namespace ::logging;
+#include "logging/logColors.h"
+
+LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
+
+// logging levels can be disabled at compile time
+// LOGGING_DISABLE_LEVEL(Error);
+// LOGGING_DISABLE_LEVEL(Trace);
+// LOGGING_DISABLE_LEVEL(Warning);
+// LOGGING_DISABLE_LEVEL(Info);
+// LOGGING_DISABLE_LEVEL(Debug);
+
+	// log::emit<Warning>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << ", here= " << source_location::current().function_name() << log::endl;
+	// log::emit() << "Hello World! with the logging framework" << log::endl;
+
+	// log::emit<logging::Trace>() << "Logging a Trace" << log::endl;
+	// log::emit<Warning>() << "Logging a Warning" << log::endl;
+	// log::emit<logging::Error>() << "Logging an Error" << log::endl;
+	// log::emit<Info>() << "Logging an Info" << log::endl;
+	// log::emit() << "Hello World! with the logging framework" << log::endl << log::endl;
+
+int Trace(std::string message, const source_location &loc = source_location::current());
+int Error(std::string message, const source_location &loc = source_location::current());
+int TraceBytes(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+int ErrorBytes(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+
 
 #define _INVALID_MESSAGEID_ ((TMessageId)-1)
 
@@ -46,8 +76,8 @@ typedef __u32 TError;
 
 // // std::ostream& operator<<(std::ostream& os, const TError& err)
 // // {
-// //     os << err.Code << ": " << err.Message;
-// //     return os;
+// //	 os << err.Code << ": " << err.Message;
+// //	 return os;
 // // }
 
 // class TErrorDetailed : public TError

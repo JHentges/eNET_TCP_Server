@@ -260,39 +260,39 @@ int TDataItem::validateDataItem(TBytes msg)
 PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 {
 	result = ERR_SUCCESS;
-	//printBytes(cout, "TDataItem::fromBytes() received = ", msg, true);
+	printBytes(cout, "TDataItem::fromBytes() received = ", msg, true);
 
 	GUARD((msg.size() >= sizeof(TDataItemHeader)), ERR_MSG_DATAITEM_TOO_SHORT, msg.size());
 
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
 	GUARD(isValidDataItemID(head->DId), ERR_DId_INVALID, head->DId);
-	//cout << "TDataItem::fromBytes() got DId: " << setw(4) << hex << head->DId << endl;
+	cout << "TDataItem::fromBytes() got DId: " << setw(4) << hex << head->DId << endl;
 
 	PTDataItem anItem;
 	TDataItemLength DataSize = head->dataLength; // MessageLength
 	if (DataSize == 0){
-		//cout << "TDataItem::fromBytes() found 0 Data, calling TDataItem(" << setw(4) << hex << head->DId << ")" << endl;
+		cout << "TDataItem::fromBytes() found 0 Data, calling TDataItem(" << setw(4) << hex << head->DId << ")" << endl;
 		return PTDataItem(new TDataItem(head->DId)); // no data in this data item is valid
 	}else
 	{
-		//cout << "TDataItem::fromBytes() found head->dataLength == " << DataSize << endl;
+		cout << "TDataItem::fromBytes() found head->dataLength == " << DataSize << endl;
 	}
 	TBytes data;
 	data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
 
 	result = validateDataItemPayload(head->DId, data);
 	if (result != ERR_SUCCESS){
-		//cout << "TDataItem::fromBytes() failed validateDataItemPayload with status: " << result << ", " << err_msg[-result] << endl;
+		cout << "TDataItem::fromBytes() failed validateDataItemPayload with status: " << result << ", " << err_msg[-result] << endl;
 		return PTDataItem(new TDataItem());
 	}
 	for (auto entry : DIdList)
 		if (entry.DId == head->DId){
 			//return entry.Construct();
-			//cout << "TDataItem::fromBytes() found matching DId in DIdList and is calling .Construct(data)" << endl;
+			cout << "TDataItem::fromBytes() found matching DId in DIdList and is calling .Construct(data)" << endl;
 
 			auto item = entry.Construct(data);
 
-			//cout << "TDataItem::fromBytes().Construct made this: " << item->AsString() << endl;
+			cout << "TDataItem::fromBytes().Construct made this: " << item->AsString() << endl;
 			return item;
 		}
 	return PTDataItem(new TDataItem(head->DId, data));
@@ -343,6 +343,7 @@ TDataItem &TDataItem::addData(__u8 aByte)
 TDataItem &TDataItem::setConnection(int aClient)
 {
 	this->conn = aClient;
+	return *this;
 }
 
 TDataItem &TDataItem::setDId(DataItemIds DId)
@@ -655,7 +656,17 @@ TBytes TREG_Write1::AsBytes(bool bAsReply)
 #pragma endregion
 
 #pragma region "ADC Stuff"
-TBytes TADC_StreamStart::AsBytes(bool bAsReply=false){};
+TBytes TADC_StreamStart::AsBytes(bool bAsReply)
+{
+	this->setDId(ADC_StreamStart);
+	TBytes bytes;
+	this->pushDId(bytes);
+	int w = 0;
+	this->pushLen(bytes, w);
+	//printBytes(std::cout, "TADC_StreamStart::AsBytes built: ", bytes, 1);
+	return bytes;
+};
+
 TADC_StreamStart &TADC_StreamStart::Go()
 {
 	if (-1 == AdcStreamingConnection)
@@ -671,23 +682,34 @@ TADC_StreamStart &TADC_StreamStart::Go()
 		throw logic_error(err_msg[-status]);
 	}
 	//initAdc();
-	terminate = 0;
+	AdcStreamTerminate = 0;
 
 	pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
 	sleep(1);
 	apci_start_dma(apci);
+	return *this;
 };
-std::shared_ptr<void> TADC_StreamStart::getResultValue(){}; // TODO: fix; think this through
-std::string TADC_StreamStart::AsString(bool bAsReply = false){};
 
+std::string TADC_StreamStart::AsString(bool bAsReply) { return "TADC_StreamStart();"; };
 
-TBytes TADC_StreamStop::AsBytes(bool bAsReply=false){};
+TBytes TADC_StreamStop::AsBytes(bool bAsReply)
+{
+	this->setDId(ADC_StreamStop);
+	TBytes bytes;
+	this->pushDId(bytes);
+	int w = 0;
+	this->pushLen(bytes, w);
+	//printBytes(std::cout, "TADC_StreamStart::AsBytes built: ", bytes, 1);
+	return bytes;
+};
+
 TADC_StreamStop &TADC_StreamStop::Go()
 {
-
+	AdcStreamTerminate = 1;
+	return *this;
 };
-std::shared_ptr<void> TADC_StreamStop::getResultValue(){}; // TODO: fix; think this through
-std::string TADC_StreamStop::AsString(bool bAsReply = false){};
+
+std::string TADC_StreamStop::AsString(bool bAsReply){return "TADC_StreamStop();";};
 
 #pragma endregion "ADC"
 
@@ -775,9 +797,10 @@ TError TMessage::validateMessage(TBytes buf) // "NAK()" is shorthand for return 
 
 	TCheckSum checksum = TMessage::calculateChecksum(buf);
 
-	if (__valid_checksum__ != checksum)
+	if (__valid_checksum__ != checksum){
+		printf("calculated csum: %02X ERROR should be zero\n", checksum);
 		return ERR_MSG_CHECKSUM; // NAK(invalid checksum)
-
+}
 	TBytes payload = buf;
 	payload.erase(payload.cbegin(), payload.cbegin() + sizeof(TMessageHeader));
 
@@ -795,28 +818,30 @@ TPayload TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &re
 {
 	TPayload dataItems; // an empty vector<>
 	result = ERR_SUCCESS;
-	if (payload_length == 0) // zero-length payload size is a valid payload
+	if (payload_length == 0){ // zero-length payload size is a valid payload
+		cout << "TMessage::parsePayload: payload_length == 0" << endl;
 		return dataItems;
+	}
 
 	TBytes DataItemBytes = Payload; // pointer to start of byte[] Payload
-	while (payload_length > sizeof(TDataItemHeader))
+	while (payload_length >= sizeof(TDataItemHeader))
 	{
 		TDataItemHeader *head = (TDataItemHeader *)DataItemBytes.data();
 		// DataItemLength is the size of the Data Item, including the size of the Data Item Length
 		// + Data Item ID, and the Data Item's payload's bytelength
 		int DataItemLength = sizeof(TDataItemHeader) + head->dataLength; // DataItem[3] is payload length
-		// cout << "DataItemLength is " << DataItemLength << ", payload_length is " << payload_length << endl;
+		cout << "TMessage::parsePayload: DataItemLength is " << DataItemLength << ", payload_length is " << payload_length << endl;
 		if (DataItemLength > payload_length)
 		{
 			result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
-			cout << "DIAG::fromBytes DataItemLength > payload_length returned error " << result << ", " << result << endl;
+			cout << "TMessage::parsePayload: DIAG::fromBytes DataItemLength > payload_length returned error " << result << ", " << result << endl;
 			break;
 		}
 
 		PTDataItem item = TDataItem::fromBytes(DataItemBytes, result);
 		if (result != ERR_SUCCESS)
 		{
-			cout << "DIAG::fromBytes returned error " << result << ", " << result << endl;
+			cout << "TMessage::parsePayload: DIAG::fromBytes returned error " << result << ", " << result << endl;
 			break;
 		}
 		dataItems.push_back(item);
@@ -831,7 +856,7 @@ TPayload TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &re
 TMessage TMessage::FromBytes(TBytes buf, TError &result)
 {
 	result = ERR_SUCCESS;
-	//printBytes(cout, "TMessage::FromBytes received = ", buf, true);
+	printBytes(cout, "TMessage::FromBytes received = ", buf, true);
 
 	auto siz = buf.size();
 	if (siz < minimumMessageLength)
@@ -844,7 +869,7 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 
 	if (!isValidMessageID(head->type))
 	{
-		//cout << "TMessage::FromBytes: detected invalid MId: " << head->type << endl;
+		cout << "TMessage::FromBytes: detected invalid MId: " << head->type << endl;
 		result = ERR_MSG_ID_UNKNOWN; // NAK(invalid MessageID Category byte)
 		return TMessage();
 	}
@@ -858,16 +883,19 @@ TMessage TMessage::FromBytes(TBytes buf, TError &result)
 	TPayload dataItems;
 	if (head->payload_size > 0)
 	{
+		cout << "TMessage::FromBytes: Payload is " << head->payload_size << " bytes" << endl;
 		TBytes payload = buf;
 		payload.erase(payload.cbegin(), payload.cbegin() + sizeof(TMessageHeader));
+		printBytes(cout, "TMessage::FromBytes generated payload: ", payload, true);
 		dataItems = parsePayload(payload, head->payload_size, result);
+		cout << "parsePayload returned " << dataItems.size() << " with resultCode " << result << endl;
 	}
 
 	TCheckSum checksum = calculateChecksum(buf);
 	if (__valid_checksum__ != checksum)
 	{
 		result = ERR_MSG_CHECKSUM; // NAK(invalid checksum)
-		printf("TMessage::FromBytes: invalid checksum\n");
+		printf("TMessage::FromBytes: invalid checksum %02X should be zero\n", checksum);
 		return TMessage();
 	}
 
@@ -1000,7 +1028,7 @@ string TMessage::AsString(bool bAsReply)
 	dest << endl
 		 << "    Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
 	cout << endl
-		 << "    Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
+		 << "    Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back())<<endl;
 
 	return dest.str();
 }

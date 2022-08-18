@@ -210,14 +210,12 @@ from discord code-review conversation with Daria; these do not belong in this so
 
 #include "safe_queue.h"
 #include "TMessage.h"
-
+#include "adc.h"
 int listen_port = 0x8080;
 
 #define DEVICEPATH "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
 int apci = 0;
 
-pthread_t logger_thread;
-pthread_t worker_thread;
 
 bool bTERMINATE = false;
 
@@ -273,20 +271,19 @@ TBytes buf; char buffer[1025];  //data buffer of 1K // TODO: FIX: there shouldn'
 int main(int argc, char *argv[])
 {
 	signal(SIGINT, sig_handler);
-    printf("Arg count is %d\n",argc);
 	if(argc <2){
 
-		printf("Error no tcp listen_port specified\n");
-		printf("Usage: %s port_to_listen\n(i.e., %s 0x8080", argv[0], argv[0]);
+		Error("[aioenetd] Error no tcp listen_port specified\n");
+		Error(std::string("[aioenetd] Usage: %s port_to_listen\n(i.e., %s 0x8080") + std::string(argv[0]) + std::string(argv[0]));
 		exit(-1);
 	}
 	sscanf(argv[1], "%d", &listen_port);
-	printf("Listen port: %d\n", listen_port);
+	Trace(std::string("[aioenetd] Listen port: %d\n") + std::to_string(listen_port));
 
 
 	apci = open(DEVICEPATH, O_RDONLY); // TODO: FIX: open the ONLY file in /dev/apci/ instead of a #defined filename
 	if(apci < 0){
-		printf("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file\n");
+		Error("[aioenetd] Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file\n");
 	}
 
 	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
@@ -303,7 +300,7 @@ int main(int argc, char *argv[])
 	//create a master socket
 	if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0)
 	{
-		perror("socket failed");
+		perror("[aioenetd] socket failed");
 		exit(EXIT_FAILURE);
 	}
 
@@ -311,7 +308,7 @@ int main(int argc, char *argv[])
 	//this is just a good habit, it will work without this
 	if( setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )
 	{
-		perror("setsockopt");
+		perror("[aioenetd] setsockopt");
 		exit(EXIT_FAILURE);
 	}
 
@@ -323,20 +320,20 @@ int main(int argc, char *argv[])
 	//bind the socket to localhost listen_port 8888
 	if (bind(master_socket, (struct sockaddr *)&address, sizeof(address))<0)
 	{
-		perror("bind failed");
+		perror("[aioenetd] bind failed");
 		exit(EXIT_FAILURE);
 	}
 
 	//try to specify maximum of 3 pending connections for the master socket
 	if (listen(master_socket, 3) < 0)
 	{
-		perror("listen(master_socket) failed");
+		perror("[aioenetd] listen(master_socket) failed");
 		exit(EXIT_FAILURE);
 	}
 
 	//accept the incoming connection
 	addrlen = sizeof(address);
-	puts("Waiting for connections ...");
+	puts("[aioenetd] Waiting for connections ...");
 
 	while(true)
 	{
@@ -358,7 +355,7 @@ int main(int argc, char *argv[])
 		activity = select( 1023, &readfds , NULL , NULL , NULL);
 		if ((activity < 0) && (errno != EINTR))
 		{
-			printf("select error");
+			printf("[aioenetd] select error");
 		}
 
 		// If something happened on the master socket then it is a new incoming connection
@@ -371,7 +368,7 @@ int main(int argc, char *argv[])
 				exit(EXIT_FAILURE);
 			}
 
-			printf("New connection, socket fd is %d , ip is : %s , listen_port : %d \n",
+			printf("[aioenetd] New connection, socket fd is %d , ip is : %s , listen_port : %d \n",
 			       new_socket, inet_ntoa(address.sin_addr) , ntohs(address.sin_port)
 				  );
 
@@ -391,7 +388,7 @@ int main(int argc, char *argv[])
 				if (valread == 0) {
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
-					printf("Host disconnected, ip %s , listen_port %d \n" ,
+					printf("[aioenetd] Host disconnected, ip %s , listen_port %d \n" ,
 						  inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
 
 					//Close the socket and mark as 0 in list for reuse
@@ -413,35 +410,35 @@ int main(int argc, char *argv[])
 							buf.push_back(buffer[i]);
 						//buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 
-						printf("\nReceived TBytes buf.size()= %ld\n", buf.size());
+						printf("\n[aioenetd] Received TBytes buf.size()= %ld\n", buf.size());
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
 						{
-							printf("error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
+							printf("[aioenetd] error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
 							continue;
 						}
 						aMessage.setConnection(aClient);
-						std::cout << "received Message: " << aMessage.AsString() << std::endl
+						std::cout << "[aioenetd] received Message: " << aMessage.AsString() << std::endl
 								  << "------" << std::endl;
 
-						printf("Executing Message DataItems[].Go(), %ld total items:\n", aMessage.DataItems.size());
+						printf("[aioenetd] Executing Message DataItems[].Go(), %ld total items:\n", aMessage.DataItems.size());
 						for (auto anItem : aMessage.DataItems)
 						{
 							anItem->Go(); // modifies contents of aMessage based on results of .Go()
 						}
 
-						std::cout << "Built Reply Message: " << aMessage.AsString(true) << std::endl;
+						std::cout << "[aioenetd] Built Reply Message: " << aMessage.AsString(true) << std::endl;
 
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
 						{
-							printf("\n\n! TCP Send of Reply appears to have failed\n\n");
+							printf("\n\n[aioenetd]  ! TCP Send of Reply appears to have failed\n\n");
 							// handle xmit error
 						}else
 						{
-							printf("sent successfully %d bytes\n\n", bytesSent);
+							printf("[aioenetd] sent successfully %d bytes\n\n", bytesSent);
 						}
 					}
 					catch(std::logic_error e)
@@ -464,7 +461,7 @@ int main(int argc, char *argv[])
 /*
         case 'Z':
             status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
-            terminate = 0;
+            AdcStreamTerminate = 0;
 
             pthread_create(&worker_thread, NULL, &worker_main, &conn);
             apci_start_dma(apci);

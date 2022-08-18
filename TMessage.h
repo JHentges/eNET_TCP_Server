@@ -399,6 +399,7 @@ class TADC_StreamStart : public TDataItem
 {
 	// 1) Deserialization
 public:
+	TADC_StreamStart() : TDataItem::TDataItem{}{};
 	TADC_StreamStart(TBytes buf) : TDataItem::TDataItem{buf}{};
 
 	// 2) Serialization: For creating Objects to be turned into bytes
@@ -407,7 +408,6 @@ public:
 
 	// 3) Verbs
 	virtual TADC_StreamStart &Go();
-	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 
 	// 4) Diagnostic
 	virtual std::string AsString(bool bAsReply = false);
@@ -425,7 +425,6 @@ public:
 
 	// 3) Verbs
 	virtual TADC_StreamStop &Go();
-	virtual std::shared_ptr<void> getResultValue(); // TODO: fix; think this through
 
 	// 4) Diagnostic
 	virtual std::string AsString(bool bAsReply = false);

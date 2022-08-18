@@ -4,50 +4,24 @@
 #include <string>
 #include "eNET-types.h"
 #include "TMessage.h"
+
 using namespace std;
 int apci;
 
-#define LOGGING_DEFINE_EXTENDED_OUTPUT_TYPE
-
-#include <experimental/source_location>
-using namespace std::experimental;
-
-#include "logging/logging.h"
-using namespace ::logging;
-#include "logging/logColors.h"
-
-LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
-
-// logging levels can be disabled at compile time
-// LOGGING_DISABLE_LEVEL(Error);
-// LOGGING_DISABLE_LEVEL(Trace);
-// LOGGING_DISABLE_LEVEL(Warning);
-// LOGGING_DISABLE_LEVEL(Info);
-// LOGGING_DISABLE_LEVEL(Debug);
-
+int Trace(const std::string message, const source_location &loc)
+{
+	std::cout << message << std::endl;
+	logging::log::emit<logging::Trace>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << message << logging::log::endl;
+	return 0;
+}
 
 int logtest(const source_location &loc = source_location::current())
 {
-    log::emit<Warning>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << ", here= " << source_location::current().function_name() << log::endl;
-    log::emit() << "Hello World! with the logging framework" << log::endl;
-
-    log::emit<Trace>() << "Logging a Trace" << log::endl;
-    log::emit<Warning>() << "Logging a Warning" << log::endl;
-    log::emit<Error>() << "Logging an Error" << log::endl;
-    log::emit<Info>() << "Logging an Info" << log::endl;
-    log::emit() << "Hello World! with the logging framework"
-                << log::endl
-                << log::endl;
-
-    // using the extension to colorize the output
-    log::emit<Error>() << "Combining console codes"
-                       << LogC::reset
-                       << log::endl
-                       << log::endl;
-
-    log::emit() << "and back to normal color mode"
-                << log::endl;
-
+    Trace(std::string("Foo! Trace-level Message"));
+    Error("Frack! ERROR!");
+    TBytes aBytes{0, 1, 88, 255};
+    TraceBytes("intro", aBytes);
+    ErrorBytes(std::string("intro2"), aBytes);
     return 0;
 }
 
@@ -80,14 +54,15 @@ TError test(TBytes Msg, const char *TestDescription, TError expectedResult = ERR
 
 int main(void) // "TEST"
 {
-    // logtest();
-    // return 0;
+    logtest();
+    return 0;
 
     try
     {
 
         __u16 len;
         printf("Testing ");
+
         printf("\n-----------------------------------\n");
         TMessageId MId_C = 'C';
         TMessage Message = TMessage(MId_C);
@@ -97,6 +72,11 @@ int main(void) // "TEST"
         cout << Message.AsString() << endl;
         test(Message.AsBytes(), "TMessage(REG_Write1(+0x17, 0x01))", ERR_SUCCESS);
 
+        TMessage Message2 = TMessage('M');
+        std::shared_ptr<TADC_StreamStart> item2(new TADC_StreamStart());
+        Message2.addDataItem(item2);
+        cout << Message2.AsString() << endl;
+        test(Message2.AsBytes(), "TMessage(TADC_StreamStart()", ERR_SUCCESS);
         // TMessageId MId_Q = 'Q';
         // TMessage M1 = TMessage(MId_Q);
         // cout << M1.AsString() << endl;
