@@ -20,8 +20,10 @@ typedef uint8_t __u8;
 typedef uint16_t __u16;
 typedef uint32_t __u32;
 #endif
-#include <string.h>
-#include <stdio.h>
+
+#include <cstring>
+#include <string>
+#include <iomanip>
 #include <memory>
 #include <vector>
 #include <thread>
@@ -42,7 +44,54 @@ typedef std::shared_ptr<TDataItem> PTDataItem;
 typedef std::vector<PTDataItem> TPayload;
 
 #define hexbyte(x, w) "0x" << std::hex << setfill('0') << std::setw(w) << std::uppercase << static_cast<int>(x)
+/// Convert integer value `val` to text in hexadecimal format. The minimum width is padded with leading zeros; if not
+/// specified, this `width` is derived from the type of the argument. Function suitable from char to long long.
+/// Pointers, floating point values, etc. are not supported; passing them will result in an (intentional!) compiler error.
+/// Basics from: http://stackoverflow.com/a/5100745/2932052
+// template <typename T>
+// inline std::string to_hex(T val, size_t width=sizeof(T)*2)
+// {
+//     std::stringstream ss;
+//     ss << std::setfill('0') << std::setw(width) << std::hex << (val|0);
+//     return ss.str();
+// }
 
+template <typename T>
+inline std::string to_hex(T i)
+{
+	// Ensure this function is called with a template parameter that makes sense. Note: static_assert is only available in C++11 and higher.
+	static_assert(std::is_integral<T>::value, "Template argument 'T' must be a fundamental integer type (e.g. int, short, etc..).");
+
+	std::stringstream stream;
+	stream << /*std::string("0x") <<*/ std::setfill('0') << std::setw(sizeof(T) * 2) << std::hex;
+
+	// If T is an 8-bit integer type (e.g. uint8_t or int8_t) it will be
+	// treated as an ASCII code, giving the wrong result. So we use C++17's
+	// "if constexpr" to have the compiler decides at compile-time if it's
+	// converting an 8-bit int or not.
+	if constexpr (std::is_same_v<std::uint8_t, T>)
+	{
+		// Unsigned 8-bit unsigned int type. Cast to int (thanks Lincoln) to
+		// avoid ASCII code interpretation of the int. The number of hex digits
+		// in the  returned string will still be two, which is correct for 8 bits,
+		// because of the 'sizeof(T)' above.
+		stream << static_cast<int>(i);
+	}
+	else if (std::is_same_v<std::int8_t, T>)
+	{
+		// For 8-bit signed int, same as above, except we must first cast to unsigned
+		// int, because values above 127d (0x7f) in the int will cause further issues.
+		// if we cast directly to int.
+		stream << static_cast<int>(static_cast<uint8_t>(i));
+	}
+	else
+	{
+		// No cast needed for ints wider than 8 bits.
+		stream << i;
+	}
+
+	return stream.str();
+}
 #pragma region TDataItem DId enum
 
 /* DId.h
