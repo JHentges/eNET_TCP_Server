@@ -1,8 +1,21 @@
 #pragma once
 
+/*
+
+This file is intended to provide standardized type names for use in ACCES' eNET- Series devices.
+This improves portability and flexibility; changing the underlying type of a thing is easier if
+has a unique type name.
+(Frex, we changed from 2-byte to 4-byte TMessage Payload Lengths with only one line in this file)
+	(well, plus some bug-fixing, because *that* goal was aspirational.)
+
+This file also has some other crap in it, like some utility stuff (hexbyte()) and the enum for
+TDataItem IDs, but that should change.
+
+*/
+
 #ifdef __linux__
 #include <linux/types.h>
-#else
+#else // define our base types for compiling on Windows
 typedef uint8_t __u8;
 typedef uint16_t __u16;
 typedef uint32_t __u32;
@@ -29,6 +42,7 @@ typedef std::shared_ptr<TDataItem> PTDataItem;
 typedef std::vector<PTDataItem> TPayload;
 
 #define hexbyte(x, w) "0x" << std::hex << setfill('0') << std::setw(w) << std::uppercase << static_cast<int>(x)
+
 #pragma region TDataItem DId enum
 
 /* DId.h

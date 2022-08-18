@@ -1,3 +1,19 @@
+#pragma once
+/*
+
+This file currently holds all the hardware-specific "magic numbers" for controlling eNET-AIO Family devices.
+Specifically, register offsets are provided as named constants (#defines), and bitmasks and values are #defined.
+
+It should, someday, be replaced with a polymorphic HAL-style layer suitable for achieving the *goal* of
+controlling different DAQ hardware from a single source file by swapping out the return values from this file.
+
+Frex: replace all the #defines with an abstract base class fields, then derive one concrete singleton class per
+      hardware type. Then:
+          AIO_Device device = new AIO_eNET-AIO16-16F();
+          device.Reset();
+          device.DeviceID();
+      or whatever
+*/
 
 #define BAR_REGISTER 1
 

@@ -58,6 +58,7 @@ int ErrorBytes(std::string intro, TBytes bytes, bool crlf = true, const source_l
 #define ERR_ADC_BUSY -14
 #define ERR_ADC_FATAL -15
 extern const char *err_msg[];
+// TError (__u32) is intended to be replaced buy a class someday
 typedef __u32 TError;
 
 // // --------------------- New, classy, TError, below ------------------

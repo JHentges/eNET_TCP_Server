@@ -34,14 +34,14 @@ int Log(const std::string message, bool crlf)
 
 int Trace(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Trace>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << message.c_str() << logging::log::endl;
+	logging::log::emit<logging::Trace>() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 
 
 int Error(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Error>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << message.c_str() << logging::log::endl;
+	logging::log::emit<logging::Error>() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 

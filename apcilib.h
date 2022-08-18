@@ -1,6 +1,7 @@
 /*
-This software is a driver for ACCES I/O Products, Inc. PCI cards.
-Copyright (C) 2007  ACCES I/O Products, Inc.
+This software is a driver for ACCES I/O Products, Inc. PCI, PCIe, and all
+related cards.
+Copyright (C) 2007...2022  ACCES I/O Products, Inc.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License

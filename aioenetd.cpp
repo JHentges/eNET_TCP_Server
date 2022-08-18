@@ -362,7 +362,6 @@ int main(int argc, char *argv[])
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
 					Trace(std::string("Host disconnected, ip: ") + inet_ntoa(address.sin_addr) + ", listen_port " + std::to_string(ntohs(address.sin_port)));
-					printf("Host disconnected, ip %s , listen_port %d \n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
 					//Close the socket and mark as 0 in list for reuse
 					close( aClient );
@@ -379,44 +378,41 @@ int main(int argc, char *argv[])
 					{
 						TError result;
 						buf.clear();
+						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 						for (int i = 0; i < valread; i++)
 							buf.push_back(buffer[i]);
-						//buf.assign(buffer, buffer + valread); // turn buffer into TBytes
-
-						printf("\nReceived TBytes buf.size()= %ld\n", buf.size());
+						Trace("\nReceived " + std::to_string(buf.size()));
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
 						{
-							printf("error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
+							Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
 							continue;
 						}
 						aMessage.setConnection(aClient);
-						std::cout << "received Message: " << aMessage.AsString() << std::endl
-								  << "------" << std::endl;
-
-						printf("Executing Message DataItems[].Go(), %ld total items:\n", aMessage.DataItems.size());
+						Trace("Received Message: " + aMessage.AsString());
+						Log("------");
+						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total items");
 						for (auto anItem : aMessage.DataItems)
 						{
 							anItem->Go(); // modifies contents of aMessage based on results of .Go()
 						}
-
-						std::cout << "Built Reply Message: " << aMessage.AsString(true) << std::endl;
+						Trace("Built Reply Message: " + aMessage.AsString(true));
 
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
 						{
-							printf("\n\n ! TCP Send of Reply appears to have failed\n\n");
+							Error("\n\n ! TCP Send of Reply appears to have failed\n");
 							// handle xmit error
 						}else
 						{
-							printf("sent successfully %d bytes\n\n", bytesSent);
+							Trace("sent successfully " + std::to_string(bytesSent) + " bytes\n\n");
 						}
 					}
 					catch(std::logic_error e)
 					{
-						std::cout << e.what() << std::endl;
+						Error(e.what());
 					}
 				}
 			}

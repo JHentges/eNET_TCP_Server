@@ -476,6 +476,7 @@ public:
 	/*
 	 * This function parses a vector<byte> that is supposed to be an entire Message
 	 * and returns a TMessage Object if no Syntax Errors were encountered.
+	 * Similar to the factory method TMessage::fromBytes(TBytes Bytes, TError Result).
 	 * It throws exceptions on errors
 	 */
 	TMessage(TBytes Msg);
@@ -483,14 +484,20 @@ public:
 public:
 	TMessageId getMId();
 	TCheckSum getChecksum(bool bAsReply = false);
+	// set the MId ("MessageId")
 	TMessage &setMId(TMessageId MId);
+	// append a Data Item onto this Message's Payload
 	TMessage &addDataItem(PTDataItem item);
 
+	// returns this Message serialized into TBytes suitable for TCP send()
 	TBytes AsBytes(bool bAsReply = false);
+	// returns this Message as a human-readable std::string
 	std::string AsString(bool bAsReply = false);
 
 public:
+	// vector of Data Items (std::vector<std::shared_ptr<TDataItem>>)
 	TPayload DataItems;
+
 protected:
 	TMessageId Id;
 	int conn;
