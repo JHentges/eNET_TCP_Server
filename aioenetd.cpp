@@ -211,6 +211,14 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "safe_queue.h"
 #include "TMessage.h"
 #include "adc.h"
+
+// logging levels can be disabled at compile time
+// LOGGING_DISABLE_LEVEL(logging::Error);
+// LOGGING_DISABLE_LEVEL(Trace);
+// LOGGING_DISABLE_LEVEL(Warning);
+// LOGGING_DISABLE_LEVEL(Info);
+// LOGGING_DISABLE_LEVEL(Debug);
+
 int listen_port = 0x8080;
 
 #define DEVICEPATH "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
@@ -219,48 +227,14 @@ int apci = 0;
 
 bool bTERMINATE = false;
 
-#define LOG_FILE_NAME "protocol_log.txt"
-SafeQueue<std::string> Log;
-
-void abort_handler(int s)
-{
-	printf("Caught signal %d\n", s);
-	bTERMINATE = true;
-	pthread_join(logger_thread, NULL);
-
-	exit(1);
-}
-
-//	pthread_create(&logger_thread, NULL, &sender_thread, conn_fd);
-void *sender_thread(void *arg)
-{
-	int conn = *(int*)(arg);
-	printf("a Logger Thread started, connection ID %d", conn);
-	while (!bTERMINATE)
-	{
-
-		std::string msg = Log.dequeue();
-		auto sentbytes = send(conn, msg.c_str(), msg.size(), 0);
-		if (sentbytes == -1) // failed-to-send, so re-queue and infrom
-			Log.enqueue(msg);
-	};
-
-	if (bTERMINATE) {
-		printf("logger thread told to terminate via global flag\n");
-	}
-
-	printf("log_man exiting\n");
-	return nullptr;
-}
+//#define LOG_FILE_NAME "protocol_log.txt"
 
 //------------------- Signal---------------------------
 
 static void sig_handler(int sig)
 {
 	printf("signal %d detected; exiting\n\n", sig);
-
 	close(apci);
-
 	exit(0);
 }
 //---------------------End signal -----------------------
@@ -273,17 +247,18 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sig_handler);
 	if(argc <2){
 
-		Error("[aioenetd] Error no tcp listen_port specified\n");
-		Error(std::string("[aioenetd] Usage: %s port_to_listen\n(i.e., %s 0x8080") + std::string(argv[0]) + std::string(argv[0]));
+		Error("Error no tcp listen_port specified");
+		Log(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen}\n(i.e., " + std::string(argv[0]) + " 0x8080"), true);
 		exit(-1);
 	}
 	sscanf(argv[1], "%d", &listen_port);
-	Trace(std::string("[aioenetd] Listen port: %d\n") + std::to_string(listen_port));
+	Trace(std::string("Listen port: ") + std::to_string(listen_port));
 
 
 	apci = open(DEVICEPATH, O_RDONLY); // TODO: FIX: open the ONLY file in /dev/apci/ instead of a #defined filename
 	if(apci < 0){
-		Error("[aioenetd] Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file\n");
+		Error("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file");
+		exit(-2);
 	}
 
 	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
@@ -300,7 +275,7 @@ int main(int argc, char *argv[])
 	//create a master socket
 	if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0)
 	{
-		perror("[aioenetd] socket failed");
+		perror("socket failed");
 		exit(EXIT_FAILURE);
 	}
 
@@ -308,7 +283,7 @@ int main(int argc, char *argv[])
 	//this is just a good habit, it will work without this
 	if( setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )
 	{
-		perror("[aioenetd] setsockopt");
+		perror("setsockopt");
 		exit(EXIT_FAILURE);
 	}
 
@@ -320,20 +295,20 @@ int main(int argc, char *argv[])
 	//bind the socket to localhost listen_port 8888
 	if (bind(master_socket, (struct sockaddr *)&address, sizeof(address))<0)
 	{
-		perror("[aioenetd] bind failed");
+		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
 
 	//try to specify maximum of 3 pending connections for the master socket
 	if (listen(master_socket, 3) < 0)
 	{
-		perror("[aioenetd] listen(master_socket) failed");
+		perror("listen(master_socket) failed");
 		exit(EXIT_FAILURE);
 	}
 
 	//accept the incoming connection
 	addrlen = sizeof(address);
-	puts("[aioenetd] Waiting for connections ...");
+	Trace("Waiting for connections ...");
 
 	while(true)
 	{
@@ -355,7 +330,7 @@ int main(int argc, char *argv[])
 		activity = select( 1023, &readfds , NULL , NULL , NULL);
 		if ((activity < 0) && (errno != EINTR))
 		{
-			printf("[aioenetd] select error");
+			Error("select error");
 		}
 
 		// If something happened on the master socket then it is a new incoming connection
@@ -368,14 +343,12 @@ int main(int argc, char *argv[])
 				exit(EXIT_FAILURE);
 			}
 
-			printf("[aioenetd] New connection, socket fd is %d , ip is : %s , listen_port : %d \n",
-			       new_socket, inet_ntoa(address.sin_addr) , ntohs(address.sin_port)
-				  );
-
-			std::cout << "Adding to list of sockets as " << ClientList.size() << std::endl;
+			Trace("New connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(address.sin_addr) + ", listen_port is: " + std::to_string(ntohs(address.sin_port)));
+			//printf("New connection, socket fd is %d , ip is : %s , listen_port : %d \n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+			Trace("Adding to list of sockets as " + std::to_string(ClientList.size()));
 			ClientList.push_back(new_socket);
 		}
-	// else its some IO operation on some other socket
+	// else it's some IO operation on some other socket
 		// TODO: FIX: should be handled by each read-thread
 		for (auto aClient : ClientList)
 		{
@@ -388,8 +361,8 @@ int main(int argc, char *argv[])
 				if (valread == 0) {
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
-					printf("[aioenetd] Host disconnected, ip %s , listen_port %d \n" ,
-						  inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+					Trace(std::string("Host disconnected, ip: ") + inet_ntoa(address.sin_addr) + ", listen_port " + std::to_string(ntohs(address.sin_port)));
+					printf("Host disconnected, ip %s , listen_port %d \n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
 					//Close the socket and mark as 0 in list for reuse
 					close( aClient );
@@ -410,35 +383,35 @@ int main(int argc, char *argv[])
 							buf.push_back(buffer[i]);
 						//buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 
-						printf("\n[aioenetd] Received TBytes buf.size()= %ld\n", buf.size());
+						printf("\nReceived TBytes buf.size()= %ld\n", buf.size());
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
 						{
-							printf("[aioenetd] error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
+							printf("error during TMessage::fromBytes(buf), %d, %s\n", result, err_msg[-result]);
 							continue;
 						}
 						aMessage.setConnection(aClient);
-						std::cout << "[aioenetd] received Message: " << aMessage.AsString() << std::endl
+						std::cout << "received Message: " << aMessage.AsString() << std::endl
 								  << "------" << std::endl;
 
-						printf("[aioenetd] Executing Message DataItems[].Go(), %ld total items:\n", aMessage.DataItems.size());
+						printf("Executing Message DataItems[].Go(), %ld total items:\n", aMessage.DataItems.size());
 						for (auto anItem : aMessage.DataItems)
 						{
 							anItem->Go(); // modifies contents of aMessage based on results of .Go()
 						}
 
-						std::cout << "[aioenetd] Built Reply Message: " << aMessage.AsString(true) << std::endl;
+						std::cout << "Built Reply Message: " << aMessage.AsString(true) << std::endl;
 
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
 						{
-							printf("\n\n[aioenetd]  ! TCP Send of Reply appears to have failed\n\n");
+							printf("\n\n ! TCP Send of Reply appears to have failed\n\n");
 							// handle xmit error
 						}else
 						{
-							printf("[aioenetd] sent successfully %d bytes\n\n", bytesSent);
+							printf("sent successfully %d bytes\n\n", bytesSent);
 						}
 					}
 					catch(std::logic_error e)
