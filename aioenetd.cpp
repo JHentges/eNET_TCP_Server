@@ -208,16 +208,19 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include <fcntl.h>
 #include <strings.h>
 
+#define LOGGING_DISABLE
+
 #include "safe_queue.h"
 #include "TMessage.h"
 #include "adc.h"
 
+
 // logging levels can be disabled at compile time
 // LOGGING_DISABLE_LEVEL(logging::Error);
-// LOGGING_DISABLE_LEVEL(Trace);
-// LOGGING_DISABLE_LEVEL(Warning);
-// LOGGING_DISABLE_LEVEL(Info);
-// LOGGING_DISABLE_LEVEL(Debug);
+// LOGGING_DISABLE_LEVEL(logging::Trace);
+// LOGGING_DISABLE_LEVEL(logging::Warning);
+// LOGGING_DISABLE_LEVEL(logging::Info);
+// LOGGING_DISABLE_LEVEL(logging::Debug);
 
 int listen_port = 0x8080;
 
@@ -381,7 +384,7 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 						for (int i = 0; i < valread; i++)
 							buf.push_back(buffer[i]);
-						Trace("[aioenetd] Received " + std::to_string(buf.size())+" bytes");
+						Log("[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient) + ": ", buf);
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
@@ -390,14 +393,18 @@ int main(int argc, char *argv[])
 							continue;
 						}
 						aMessage.setConnection(aClient);
-						Trace("Received Message: " + aMessage.AsString());
-						Log("------",true);
-						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total items");
+
+						Log("Received Message:\n------\n" + aMessage.AsString()); Log("------",true);
+
+						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
 						for (auto anItem : aMessage.DataItems)
 						{
-							anItem->Go(); // modifies contents of aMessage based on results of .Go()
+							anItem->Go();
 						}
-						Trace("Built Reply Message: " + aMessage.AsString(true));
+
+						aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
+
+						Log("Built Reply Message: \n------\n" + aMessage.AsString(true)); Log("------",true);
 
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
@@ -407,7 +414,7 @@ int main(int argc, char *argv[])
 							// handle xmit error
 						}else
 						{
-							Trace("sent successfully " + std::to_string(bytesSent) + " bytes\n\n");
+							Log("sent successfully " + std::to_string(bytesSent) + " bytes: ", rbuf);
 						}
 					}
 					catch(std::logic_error e)

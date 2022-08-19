@@ -206,5 +206,22 @@ namespace logging {
         }
     };
 
+        /*! \brief This class is intended to be used as a template argument for
+     *         the logging::log::emit() function.
+     *
+     *         Prefixes the output with "[  Info ] " and enables reporting
+     *         of the current logging level.
+     */
+    struct Info {
+        /*! \brief delivers the current %level of %logging */
+        static ::logging::Level::levels level () {
+            return ::logging::Level::info;
+        }
+        /*! \brief delivers the string reporting the current %level of %logging */
+        static const char * desc() {
+            return "[  Info ] ";
+        }
+    };
+
 } /* logging */
 

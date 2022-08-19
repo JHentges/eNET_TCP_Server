@@ -100,10 +100,10 @@ LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
 
 // logging levels can be disabled at compile time
 // LOGGING_DISABLE_LEVEL(logging::Error);
-// LOGGING_DISABLE_LEVEL(Trace);
-// LOGGING_DISABLE_LEVEL(Warning);
-// LOGGING_DISABLE_LEVEL(Info);
-// LOGGING_DISABLE_LEVEL(Debug);
+// LOGGING_DISABLE_LEVEL(logging::Trace);
+// LOGGING_DISABLE_LEVEL(logging::Warning);
+// LOGGING_DISABLE_LEVEL(logging::Info);
+// LOGGING_DISABLE_LEVEL(logging::Debug);
 
 	// EXAMPLE USAGES:
 	// log::emit<Warning>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << ", here= " << source_location::current().function_name() << log::endl;
@@ -125,3 +125,4 @@ int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_locati
 int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 int Error(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 
+__u64 get_boottimens();
