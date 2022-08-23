@@ -214,14 +214,6 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "TMessage.h"
 #include "adc.h"
 
-
-// logging levels can be disabled at compile time
-// LOGGING_DISABLE_LEVEL(logging::Error);
-// LOGGING_DISABLE_LEVEL(logging::Trace);
-// LOGGING_DISABLE_LEVEL(logging::Warning);
-// LOGGING_DISABLE_LEVEL(logging::Info);
-// LOGGING_DISABLE_LEVEL(logging::Debug);
-
 int listen_port = 0x8080;
 
 #define DEVICEPATH "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
@@ -247,11 +239,12 @@ TBytes buf; char buffer[1025];  //data buffer of 1K // TODO: FIX: there shouldn'
 
 int main(int argc, char *argv[])
 {
+	Log("AIOeNET Daemon STARTING");
 	signal(SIGINT, sig_handler);
 	if(argc <2){
 
 		Error("Error no tcp listen_port specified");
-		Log(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen}\n(i.e., " + std::string(argv[0]) + " 0x8080"), true);
+		Log(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen}\n(i.e., " + std::string(argv[0]) + " 0x8080"));
 		exit(-1);
 	}
 	sscanf(argv[1], "%d", &listen_port);
@@ -346,7 +339,7 @@ int main(int argc, char *argv[])
 				exit(EXIT_FAILURE);
 			}
 
-			Trace("New connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(address.sin_addr) + ", listen_port is: " + std::to_string(ntohs(address.sin_port)));
+			Log("New connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(address.sin_addr) + ", listen_port is: " + std::to_string(ntohs(address.sin_port)));
 			//printf("New connection, socket fd is %d , ip is : %s , listen_port : %d \n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 			Trace("Adding to list of sockets as " + std::to_string(ClientList.size()));
 			ClientList.push_back(new_socket);
@@ -364,7 +357,7 @@ int main(int argc, char *argv[])
 				if (valread == 0) {
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
-					Trace(std::string("Host disconnected, ip: ") + inet_ntoa(address.sin_addr) + ", listen_port " + std::to_string(ntohs(address.sin_port)));
+					Log(std::string("Host disconnected, ip: ") + inet_ntoa(address.sin_addr) + ", listen_port " + std::to_string(ntohs(address.sin_port)));
 
 					//Close the socket and mark as 0 in list for reuse
 					close( aClient );
@@ -384,7 +377,8 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 						for (int i = 0; i < valread; i++)
 							buf.push_back(buffer[i]);
-						Log("[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient) + ": ", buf);
+						Log("\n------\n[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient));
+						Debug("Raw: ", buf);
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
@@ -394,7 +388,7 @@ int main(int argc, char *argv[])
 						}
 						aMessage.setConnection(aClient);
 
-						Log("Received Message:\n------\n" + aMessage.AsString()); Log("------",true);
+						Log("\n\nReceived Message: \n" + aMessage.AsString());
 
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
 						for (auto anItem : aMessage.DataItems)
@@ -404,7 +398,8 @@ int main(int argc, char *argv[])
 
 						aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
 
-						Log("Built Reply Message: \n------\n" + aMessage.AsString(true)); Log("------",true);
+						Log("Built Reply Message: \n" + aMessage.AsString(true));
+
 
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);

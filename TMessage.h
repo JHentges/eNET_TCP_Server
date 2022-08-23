@@ -298,11 +298,11 @@ public:
 
 	// 2) Serialization: For creating Objects to be turned into bytes
 public:
+	TREG_Read1();
 	// constructor of choice for source; all parameters included. TODO: ? make overloadable
 	TREG_Read1(DataItemIds DId, int ofs);
-	TREG_Read1();
-	virtual TBytes AsBytes(bool bAsReply=false);
 	TREG_Read1 &setOffset(int ofs);
+	virtual TBytes AsBytes(bool bAsReply=false);
 
 	// 3) Verbs
 public:
@@ -363,11 +363,11 @@ class TADC_StreamStart : public TDataItem
 {
 	// 1) Deserialization
 public:
-	TADC_StreamStart() : TDataItem::TDataItem{}{};
-	TADC_StreamStart(TBytes buf) : TDataItem::TDataItem{buf}{};
+	TADC_StreamStart(TBytes buf);
 
 	// 2) Serialization: For creating Objects to be turned into bytes
 public:
+	TADC_StreamStart();
 	virtual TBytes AsBytes(bool bAsReply=false);
 
 	// 3) Verbs
@@ -381,7 +381,8 @@ class TADC_StreamStop : public TDataItem
 {
 	// 1) Deserialization
 public:
-	TADC_StreamStop(TBytes buf) : TDataItem::TDataItem{buf}{};
+	TADC_StreamStop(){ setDId(ADC_StreamStop);}
+	TADC_StreamStop(TBytes buf);
 
 	// 2) Serialization: For creating Objects to be turned into bytes
 public:

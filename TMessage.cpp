@@ -40,7 +40,7 @@ TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
-	{REG_Read1, 1, 1, 1, construct<TREG_Read1>, "[__u8 or __u32] REG_Read1(__u8 offset)"},
+	{REG_Read1, 1, 1, 1, construct<TREG_Read1>, "REG_Read1(__u8 offset) → [__u8 or __u32]"},
 	DIdNYI(REG_ReadAll),
 	DIdNYI(REG_ReadSome),
 	DIdNYI(REG_ReadBuf),
@@ -191,7 +191,7 @@ int TDataItem::getDIdIndex(DataItemIds DId)
 		if (DId == DIdList[index].DId){
 			return index;
 	}}
-	throw exception();
+	throw logic_error("DId not found in list");
 }
 
 // returns human-readable description of this TDataItem
@@ -273,20 +273,19 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 
 	PTDataItem anItem;
 	TDataItemLength DataSize = head->dataLength; // MessageLength
-	if (DataSize == 0){
-		Trace("Found 0 Data, calling TDataItem(" + to_hex((TDataId)head->DId) + ")");
-		return PTDataItem(new TDataItem(head->DId)); // no data in this data item is valid
-	}else
-	{
-		// Trace("Found head->dataLength: " + std::to_string(DataSize));
-	}
 	TBytes data;
-	data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
+	if (DataSize == 0) {
 
-	result = validateDataItemPayload(head->DId, data);
-	if (result != ERR_SUCCESS){
-		Error("TDataItem::fromBytes() failed validateDataItemPayload with status: " + std::to_string(result) + ", " + err_msg[-result]);
-		return PTDataItem(new TDataItem());
+	}
+	else
+	{
+		data.insert(data.end(), msg.cbegin() + sizeof(TDataItemHeader), msg.cbegin() + sizeof(TDataItemHeader) + DataSize);
+
+		result = validateDataItemPayload(head->DId, data);
+		if (result != ERR_SUCCESS){
+			Error("TDataItem::fromBytes() failed validateDataItemPayload with status: " + std::to_string(result) + ", " + err_msg[-result]);
+			return PTDataItem(new TDataItem());
+		}
 	}
 	for (auto entry : DIdList)
 		if (entry.DId == head->DId){
@@ -415,6 +414,7 @@ string TDataItem::AsString(bool bAsReply)
 TDataItem &TDataItem::Go()
 {
 	Trace("ENTER - NYI!!!!");
+	Error("Not Yet Implemented!");
 	this->resultCode = ERR_NYI;
 	return *this;
 }
@@ -592,7 +592,7 @@ TREG_Writes &TREG_Writes::Go()
 		{
 		case 8:
 			this->resultCode |= apci_write8(apci, 0, BAR_REGISTER, action.offset, (__u8)(action.value & 0x000000FF));
-			Trace("apci_write8(" + to_hex((__u8)action.offset) + ") → " + to_hex((__u8)action.value & 0xFF));
+			Trace("apci_write8(" + to_hex((__u8)action.offset) + ") → " + to_hex((__u8)(action.value & 0xFF)));
 			break;
 		case 32:
 			this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
@@ -607,11 +607,11 @@ string TREG_Writes::AsString(bool bAsReply)
 	dest << "DataItem = " << this->getDIdDesc();
 	for (auto aWrite : this->Writes)
 	{
-		dest << " [";
-		if (aWrite.width == 8)
-			dest << " " << aWrite.width;
-		else
-			dest << aWrite.width;
+		dest << " ["<<aWrite.width;
+		// if (aWrite.width == 8)
+		// 	dest << " " << aWrite.width;
+		// else
+		// 	dest << aWrite.width;
 		dest << " bit] write to Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(aWrite.offset);
 		__u32 v = aWrite.value;
 		dest << " with value = " << hex << setw(aWrite.width / 8 * 2) << v;
@@ -667,6 +667,16 @@ TBytes TREG_Write1::AsBytes(bool bAsReply)
 #pragma endregion
 
 #pragma region "ADC Stuff"
+TADC_StreamStart::TADC_StreamStart() {
+	setDId(ADC_StreamStart);
+}
+
+TADC_StreamStart::TADC_StreamStart(TBytes buf)
+{
+	this->setDId(ADC_StreamStart);
+	GUARD(buf.size() == 0, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
+}
+
 TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 {
 	this->setDId(ADC_StreamStart);
@@ -680,10 +690,10 @@ TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 
 TADC_StreamStart &TADC_StreamStart::Go()
 {
-
-	if (-1 == AdcStreamingConnection)
+	Log("ADC_StreamStart::Go()");
+	if (-1 != AdcStreamingConnection)
 	{
-		throw logic_error(err_msg[ERR_ADC_BUSY]);
+		throw logic_error(err_msg[-ERR_ADC_BUSY]);
 	}
 	AdcStreamingConnection = this->conn;
 
@@ -695,7 +705,7 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	}
 	//initAdc();
 	AdcStreamTerminate = 0;
-
+	Log("Starting ADC Streaming Worker Thread");
 	pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
 	sleep(1);
 	apci_start_dma(apci);
@@ -703,7 +713,11 @@ TADC_StreamStart &TADC_StreamStart::Go()
 };
 
 std::string TADC_StreamStart::AsString(bool bAsReply) { return "TADC_StreamStart();"; };
-
+TADC_StreamStop::TADC_StreamStop(TBytes buf)
+{
+	this->setDId(ADC_StreamStop);
+	GUARD(buf.size() == 0, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
+}
 TBytes TADC_StreamStop::AsBytes(bool bAsReply)
 {
 

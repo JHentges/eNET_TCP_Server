@@ -100,7 +100,7 @@ LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
 
 // logging levels can be disabled at compile time
 // LOGGING_DISABLE_LEVEL(logging::Error);
-// LOGGING_DISABLE_LEVEL(logging::Trace);
+ LOGGING_DISABLE_LEVEL(logging::Trace);
 // LOGGING_DISABLE_LEVEL(logging::Warning);
 // LOGGING_DISABLE_LEVEL(logging::Info);
 // LOGGING_DISABLE_LEVEL(logging::Debug);
@@ -115,14 +115,14 @@ LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
 	// log::emit<Info>() << "Logging an Info" << log::endl;
 	// log::emit() << "Hello World! with the logging framework" << log::endl << log::endl;
 
-int Log(const std::string message, bool crlf = false);
+int Log(  std::string message, const source_location &loc = source_location::current());
 int Trace(std::string message, const source_location &loc = source_location::current());
 int Debug(std::string message, const source_location &loc = source_location::current());
 int Error(std::string message, const source_location &loc = source_location::current());
 
-int Log(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+int Log(  std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 int Error(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 
-__u64 get_boottimens();
+__u64 get_boottime_microseconds();

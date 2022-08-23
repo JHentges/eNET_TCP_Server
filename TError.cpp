@@ -25,43 +25,41 @@ const char *err_msg[] = {
 };
 
 // fetches nanoseconds elapsed since booting
-__u64 get_boottimens()
+__u64 get_boottime_microseconds()
 {
 	static __u64 first_time = 0;
 	struct timespec up;
 	clock_gettime(CLOCK_BOOTTIME, &up);
-	if (first_time=0)
+	if (first_time==0)
 	{
-		first_time = up.tv_sec * 1000000000 + up.tv_nsec;
+		first_time = up.tv_sec * 1000000+ up.tv_nsec/1000;
 		Log("first="+std::to_string(first_time));
 	}
-	return up.tv_sec * 1000000000 + up.tv_nsec - first_time;
+	return up.tv_sec * 1000000 + up.tv_nsec/1000 - first_time;
 }
 
-int Log(const std::string message, bool crlf)
+int Log(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Info>() <<  message.c_str();
-	if (crlf)
-		logging::log::emit<logging::Info>() << logging::log::endl;
+	logging::log::emit<logging::Info>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " <<  message.c_str() << logging::log::endl;
 	return 0;
 }
 
 int Trace(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Trace>() << get_boottimens() << "] " << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
+	logging::log::emit<logging::Trace>() << get_boottime_microseconds() << "] " << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 
 int Debug(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Debug>() << get_boottimens() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
+	logging::log::emit<logging::Debug>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 
 
 int Error(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Error>() << get_boottimens() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
+	logging::log::emit<logging::Error>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 
@@ -73,9 +71,9 @@ int Log(const std::string intro, const TBytes bytes, bool crlf, const source_loc
 	for (auto byt : bytes)
 		msg << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " ";
 	if (crlf)
-		logging::log::emit<logging::Info>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Info>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Info>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+		logging::log::emit<logging::Info>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
 	return 0;
 }
 
@@ -86,9 +84,9 @@ int Trace(const std::string intro, const TBytes bytes, bool crlf, const source_l
 	for (auto byt : bytes)
 		msg << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " ";
 	if (crlf)
-		logging::log::emit<logging::Trace>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Trace>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Trace>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+		logging::log::emit<logging::Trace>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
 	return 0;
 }
 
@@ -99,9 +97,9 @@ int Debug(const std::string intro, const TBytes bytes, bool crlf, const source_l
 	for (auto byt : bytes)
 		msg << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " ";
 	if (crlf)
-		logging::log::emit<logging::Debug>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Debug>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Debug>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+		logging::log::emit<logging::Debug>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
 	return 0;
 }
 
@@ -116,8 +114,8 @@ int Error(const std::string intro, const TBytes bytes, bool crlf, const source_l
 		msg ;
 
 	if (crlf)
-		logging::log::emit<logging::Error>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Error>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Error>() << get_boottimens() << "] "  << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str();
+		logging::log::emit<logging::Error>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str();
 	return 0;
 }
