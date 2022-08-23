@@ -24,45 +24,24 @@ const char *err_msg[] = {
 	/* -15 */ "ADC FATAL",
 };
 
-// fetches nanoseconds elapsed since booting
-__u64 get_boottime_microseconds()
+timespec firsttime;
+
+std::string elapsedms()
 {
-	static __u64 first_time = 0;
 	struct timespec up;
 	clock_gettime(CLOCK_BOOTTIME, &up);
-	if (first_time==0)
-	{
-		first_time = up.tv_sec * 1000000+ up.tv_nsec/1000;
-		Log("first="+std::to_string(first_time));
-	}
-	return up.tv_sec * 1000000 + up.tv_nsec/1000 - first_time;
+	if(firsttime.tv_nsec == 0)
+		firsttime = up;
+	double now = double(up.tv_sec-firsttime.tv_sec) + double(up.tv_nsec-firsttime.tv_nsec) / 1.0e9;
+	return std::to_string(now) + "sec] ";
 }
 
+#ifndef LOG_DISABLE_INFO
 int Log(const std::string message, const source_location &loc)
 {
-	logging::log::emit<logging::Info>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " <<  message.c_str() << logging::log::endl;
+	logging::log::emit<logging::Info>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " <<  message.c_str() << logging::log::endl;
 	return 0;
 }
-
-int Trace(const std::string message, const source_location &loc)
-{
-	logging::log::emit<logging::Trace>() << get_boottime_microseconds() << "] " << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
-	return 0;
-}
-
-int Debug(const std::string message, const source_location &loc)
-{
-	logging::log::emit<logging::Debug>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
-	return 0;
-}
-
-
-int Error(const std::string message, const source_location &loc)
-{
-	logging::log::emit<logging::Error>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
-	return 0;
-}
-
 // [  Info ] with TBytes dump
 int Log(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
 {
@@ -71,9 +50,17 @@ int Log(const std::string intro, const TBytes bytes, bool crlf, const source_loc
 	for (auto byt : bytes)
 		msg << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " ";
 	if (crlf)
-		logging::log::emit<logging::Info>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Info>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Info>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+		logging::log::emit<logging::Info>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+	return 0;
+}
+#endif
+
+#ifndef LOG_DISABLE_TRACE
+int Trace(const std::string message, const source_location &loc)
+{
+	logging::log::emit<logging::Trace>() << elapsedms().c_str()<< loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 
@@ -84,9 +71,17 @@ int Trace(const std::string intro, const TBytes bytes, bool crlf, const source_l
 	for (auto byt : bytes)
 		msg << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " ";
 	if (crlf)
-		logging::log::emit<logging::Trace>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Trace>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Trace>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+		logging::log::emit<logging::Trace>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+	return 0;
+}
+#endif
+
+#ifndef LOG_DISABLE_DEBUG
+int Debug(const std::string message, const source_location &loc)
+{
+	logging::log::emit<logging::Debug>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
 	return 0;
 }
 
@@ -97,12 +92,18 @@ int Debug(const std::string intro, const TBytes bytes, bool crlf, const source_l
 	for (auto byt : bytes)
 		msg << std::hex << std::setfill('0') << std::setw(2) << std::uppercase << static_cast<int>(byt) << " ";
 	if (crlf)
-		logging::log::emit<logging::Debug>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Debug>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Debug>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
+		logging::log::emit<logging::Debug>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")— " << msg.str().c_str();
 	return 0;
 }
+#endif
 
+int Error(const std::string message, const source_location &loc)
+{
+	logging::log::emit<logging::Error>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ") — " << message.c_str() << logging::log::endl;
+	return 0;
+}
 
 int Error(const std::string intro, const TBytes bytes, bool crlf, const source_location &loc)
 {
@@ -114,8 +115,8 @@ int Error(const std::string intro, const TBytes bytes, bool crlf, const source_l
 		msg ;
 
 	if (crlf)
-		logging::log::emit<logging::Error>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str() << logging::log::endl;
+		logging::log::emit<logging::Error>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str() << logging::log::endl;
 	else
-		logging::log::emit<logging::Error>() << get_boottime_microseconds() << "] "  << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str();
+		logging::log::emit<logging::Error>() << elapsedms().c_str() << loc.file_name() << ":" << loc.function_name() << "(" << loc.line() << ")" << msg.str().c_str();
 	return 0;
 }

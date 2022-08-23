@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 						for (int i = 0; i < valread; i++)
 							buf.push_back(buffer[i]);
-						Log("\n------\n[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient));
+						Log("\n[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient));
 						Debug("Raw: ", buf);
 
 						auto aMessage = TMessage::FromBytes(buf, result);
@@ -391,16 +391,21 @@ int main(int argc, char *argv[])
 						Log("\n\nReceived Message: \n" + aMessage.AsString());
 
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
-						for (auto anItem : aMessage.DataItems)
+						try
 						{
-							anItem->Go();
+							for (auto anItem : aMessage.DataItems)
+							{
+								anItem->Go();
+							}
+							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
+						}
+						catch(std::logic_error e)
+						{
+							aMessage.setMId('X');
+							Error(e.what());
 						}
 
-						aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
-
-						Log("Built Reply Message: \n" + aMessage.AsString(true));
-
-
+						Trace("Built Reply Message: \n" + aMessage.AsString(true));
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
@@ -409,7 +414,7 @@ int main(int argc, char *argv[])
 							// handle xmit error
 						}else
 						{
-							Log("sent successfully " + std::to_string(bytesSent) + " bytes: ", rbuf);
+							Log("sent Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
 						}
 					}
 					catch(std::logic_error e)

@@ -4,6 +4,13 @@
 	Also has Log/Trace/Error functionality, but that should be moved out eventually.
 */
 
+#define LOG_DISABLE_TRACE
+// #define LOG_DISABLE_INFO
+// #define LOG_DISABLE_DEBUG
+// #define LOG_DISABLE_ERROR
+
+
+
 #include <linux/types.h>
 
 #include "eNET-types.h"
@@ -100,11 +107,33 @@ LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
 
 // logging levels can be disabled at compile time
 // LOGGING_DISABLE_LEVEL(logging::Error);
- LOGGING_DISABLE_LEVEL(logging::Trace);
-// LOGGING_DISABLE_LEVEL(logging::Warning);
-// LOGGING_DISABLE_LEVEL(logging::Info);
-// LOGGING_DISABLE_LEVEL(logging::Debug);
+#ifdef LOG_DISABLE_TRACE
+LOGGING_DISABLE_LEVEL(logging::Trace);
+#define Trace(...) {}
+#else
+int Trace(std::string message, const source_location &loc = source_location::current());
+int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+#endif
 
+#ifdef LOG_DISABLE_WARNING
+// LOGGING_DISABLE_LEVEL(logging::Warning);
+#endif
+
+#ifdef LOG_DISABLE_INFO
+LOGGING_DISABLE_LEVEL(logging::Info);
+#define Log(...){}
+#else
+int Log(  std::string message, const source_location &loc = source_location::current());
+int Log(  std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+#endif
+
+#ifdef LOG_DISABLE_DEBUG
+LOGGING_DISABLE_LEVEL(logging::Debug);
+#define Debug(...){}
+#else
+int Debug(std::string message, const source_location &loc = source_location::current());
+int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
+#endif
 	// EXAMPLE USAGES:
 	// log::emit<Warning>() << loc.file_name() << " : " << loc.function_name() << "(" << loc.line() << ")" << ", here= " << source_location::current().function_name() << log::endl;
 	// log::emit() << "Hello World! with the logging framework" << log::endl;
@@ -115,14 +144,7 @@ LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
 	// log::emit<Info>() << "Logging an Info" << log::endl;
 	// log::emit() << "Hello World! with the logging framework" << log::endl << log::endl;
 
-int Log(  std::string message, const source_location &loc = source_location::current());
-int Trace(std::string message, const source_location &loc = source_location::current());
-int Debug(std::string message, const source_location &loc = source_location::current());
 int Error(std::string message, const source_location &loc = source_location::current());
-
-int Log(  std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 int Error(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 
 __u64 get_boottime_microseconds();

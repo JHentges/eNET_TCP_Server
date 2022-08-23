@@ -328,6 +328,7 @@ class TREG_Writes : public TDataItem
 {
 	public:
 		TREG_Writes() = default;
+		~TREG_Writes();
 		TREG_Writes(TBytes buf);
 		virtual TREG_Writes &Go();
 		TREG_Writes &addWrite(__u8 w, int ofs, __u32 value);
@@ -338,12 +339,13 @@ class TREG_Writes : public TDataItem
 };
 #pragma endregion
 
-#pragma region "class TREG_Write1 : TDataItem" for REG_Write1 "Write Register Value"
+#pragma region "class TREG_Write1 : TREG_Writes" for REG_Write1 "Write Register Value"
 class TREG_Write1 : public TREG_Writes
 {
 public:
 	static TError validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 	TREG_Write1();
+	~TREG_Write1();
 	TREG_Write1(TBytes buf);
 	virtual TBytes AsBytes(bool bAsReply=false);
 	//virtual std::string AsString(bool bAsReply=false);

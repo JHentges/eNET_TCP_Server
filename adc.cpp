@@ -27,7 +27,7 @@
 
 #include "safe_queue.h"
 #include "TMessage.h"
-
+#include "TError.h"
 #include "eNET-AIO.h"
 #include "apcilib.h"
 #include "adc.h"
@@ -43,12 +43,13 @@ pthread_mutex_t mutex;
 sem_t empty;
 sem_t full;
 
-bool done = false;
+
 int AdcStreamingConnection = -1;
 
 
 void *log_main(void *arg)
 {
+	Log("Thread started");
 	int conn = *(int *)arg;
 	int ring_read_index = 0;
 
@@ -65,12 +66,12 @@ void *log_main(void *arg)
 		ring_read_index++;
 		ring_read_index %= RING_BUFFER_SLOTS;
 	};
+	Log("Thread ended (?)");
 }
-
-
 
 void *worker_main(void *arg)
 {
+	Log("Thread started");
 	int *conn_fd = (int *)arg;
 	int num_slots, first_slot, data_discarded, status = 0;
 
@@ -79,32 +80,36 @@ void *worker_main(void *arg)
 	status |= pthread_mutex_init(&mutex, NULL);
 	if (status)
 	{
+		Error("Mutex failed");
 		return (void *)(size_t)status;
 	}
 
 	void *mmap_addr = (void *)mmap(NULL, DMA_BUFF_SIZE, PROT_READ, MAP_SHARED, apci, 0);
 	if (mmap_addr == NULL)
 	{
+		Error("mmap failed");
 		return (void *)-1;
 	}
 	try
 	{
 		pthread_create(&logger_thread, NULL, &log_main, conn_fd);
 
-		while (!done)
+		while (!AdcStreamTerminate)
 		{
 			status = apci_dma_data_ready(apci, 1, &first_slot, &num_slots, &data_discarded);
 			if ((data_discarded != 0) || status)
 			{
-				printf("  Worker Thread: first_slot = %d, num_slots = %d, data_discarded = %d; status = %d\n", first_slot, num_slots, data_discarded, status);
+				Log("first_slot: "+std::to_string(first_slot)+ "num_slots:" +
+				       std::to_string(num_slots)+ "+data_discarded:"+std::to_string(data_discarded) +"; status: " + std::to_string(status));
 			}
 
 			if (num_slots == 0) // Worker Thread: No data pending; Waiting for IRQ
 			{
+				Log("no data yet, blocking");
 				status = apci_wait_for_irq(apci, 1); // thread blocking
 				if (status)
 				{
-					printf("  Worker Thread: Error waiting for IRQ\n");
+					Error("  Worker Thread: Error waiting for IRQ\n");
 					break;
 				}
 				continue;
@@ -121,10 +126,11 @@ void *worker_main(void *arg)
 				apci_dma_data_done(apci, 1, 1);
 			}
 		}
+		Log("Thread ended (?)");
 	}
 	catch(std::exception e)
 	{
-		printf("%s\n", e.what());
+		Error(e.what());
 	}
 	pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);

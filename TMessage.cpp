@@ -574,6 +574,11 @@ string TREG_Read1::AsString(bool bAsReply)
 #pragma endregion
 
 #pragma region TREG_Writes implementation
+TREG_Writes::~TREG_Writes()
+{
+	this->Writes.clear();
+}
+
 TREG_Writes &TREG_Writes::addWrite(__u8 w, int ofs, __u32 value)
 {
 	//Trace("ENTER, w:" + std::to_string(w) + ", offset: " + to_hex((__u8)ofs) + ", value: " + to_hex(value));
@@ -624,6 +629,10 @@ string TREG_Writes::AsString(bool bAsReply)
 TREG_Write1::TREG_Write1()
 {
 	this->setDId(REG_Write1);
+}
+TREG_Write1::~TREG_Write1()
+{
+	this->Writes.clear();
 }
 
 TREG_Write1::TREG_Write1(TBytes buf)
