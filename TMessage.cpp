@@ -26,12 +26,11 @@ const vector<TMessageId> ValidMessageIDs{
 // specific to eNET-AIO register map
 int widthFromOffset(int ofs)
 {
-	int w = 0;
 	if (ofs < 0x18)
-		w = 8;
+		return 8;
 	else if ((ofs <= 0xDC) && (ofs % 4 == 0))
-		w = 32;
-    return w;
+		return 32;
+    return 0;
 }
 
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d " (NYI)"}
