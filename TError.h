@@ -94,21 +94,20 @@ typedef __u32 TError;
 
 /* Logging Stuff */
 
-#define LOGGING_DEFINE_EXTENDED_OUTPUT_TYPE
-
 #include <experimental/source_location>
 using namespace std::experimental;
 
-#include "logging/logging.h"
-//using namespace ::logging;
-#include "logging/logColors.h"
+// #define LOGGING_DEFINE_EXTENDED_OUTPUT_TYPE
+// #include "logging/logging.h"
+// //using namespace ::logging;
+// #include "logging/logColors.h"
 
-LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
+// LOGGING_DEFINE_OUTPUT(CC<LoggingType>)
 
 // logging levels can be disabled at compile time
 // LOGGING_DISABLE_LEVEL(logging::Error);
 #ifdef LOG_DISABLE_TRACE
-LOGGING_DISABLE_LEVEL(logging::Trace);
+// LOGGING_DISABLE_LEVEL(logging::Trace);
 #define Trace(...) {}
 #else
 int Trace(std::string message, const source_location &loc = source_location::current());
@@ -117,10 +116,11 @@ int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_locati
 
 #ifdef LOG_DISABLE_WARNING
 // LOGGING_DISABLE_LEVEL(logging::Warning);
+#define Warn(...) {}
 #endif
 
 #ifdef LOG_DISABLE_INFO
-LOGGING_DISABLE_LEVEL(logging::Info);
+// LOGGING_DISABLE_LEVEL(logging::Info);
 #define Log(...){}
 #else
 int Log(  std::string message, const source_location &loc = source_location::current());

@@ -213,6 +213,8 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "safe_queue.h"
 #include "TMessage.h"
 #include "adc.h"
+#include "apcilib.h"
+
 
 int listen_port = 0x8080;
 
@@ -340,7 +342,6 @@ int main(int argc, char *argv[])
 			}
 
 			Log("New connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(address.sin_addr) + ", listen_port is: " + std::to_string(ntohs(address.sin_port)));
-			//printf("New connection, socket fd is %d , ip is : %s , listen_port : %d \n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 			Trace("Adding to list of sockets as " + std::to_string(ClientList.size()));
 			ClientList.push_back(new_socket);
 		}
@@ -358,8 +359,16 @@ int main(int argc, char *argv[])
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&address , (socklen_t*)&addrlen);
 					Log(std::string("Host disconnected, ip: ") + inet_ntoa(address.sin_addr) + ", listen_port " + std::to_string(ntohs(address.sin_port)));
-
-					//Close the socket and mark as 0 in list for reuse
+					if (AdcStreamingConnection = aClient)
+					{
+						Log("terminating ADC Streaming");
+						apci_cancel_irq(apci, 1);
+						AdcStreamTerminate = 1;
+						AdcStreamingConnection = -1;
+						pthread_cancel(worker_thread);
+						pthread_join(worker_thread, NULL);
+					}
+					// Close the socket and mark as 0 in list for reuse
 					close( aClient );
 					auto index = find(ClientList.begin(), ClientList.end(), aClient);
 					if (index != ClientList.end())
@@ -377,8 +386,7 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + valread); // turn buffer into TBytes
 						for (int i = 0; i < valread; i++)
 							buf.push_back(buffer[i]);
-						Log("\n[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient));
-						Debug("Raw: ", buf);
+						Log("\n[aioenet] Received " + std::to_string(buf.size())+" bytes; from Client# " + std::to_string(aClient)+": ", buf);
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
@@ -388,7 +396,7 @@ int main(int argc, char *argv[])
 						}
 						aMessage.setConnection(aClient);
 
-						Log("\n\nReceived Message: \n" + aMessage.AsString());
+						Log("Received Message:" + aMessage.AsString());
 
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
 						try

@@ -701,6 +701,7 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	Log("ADC_StreamStart::Go()");
 	if (-1 != AdcStreamingConnection)
 	{
+		Error("Attempt to start ADC from Client:"+std::to_string(this->conn)+" while already started from Client: "+std::to_string(AdcStreamingConnection));
 		throw logic_error(err_msg[-ERR_ADC_BUSY]);
 	}
 	AdcStreamingConnection = this->conn;
@@ -725,6 +726,7 @@ TADC_StreamStop::TADC_StreamStop(TBytes buf)
 	this->setDId(ADC_StreamStop);
 	GUARD(buf.size() == 0, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
 }
+
 TBytes TADC_StreamStop::AsBytes(bool bAsReply)
 {
 
@@ -739,8 +741,13 @@ TBytes TADC_StreamStop::AsBytes(bool bAsReply)
 
 TADC_StreamStop &TADC_StreamStop::Go()
 {
-
+	Log("ADC_StreamStop::Go(): terminating ADC Streaming");
 	AdcStreamTerminate = 1;
+	apci_cancel_irq(apci, 1);
+	AdcStreamingConnection = -1;
+	pthread_cancel(worker_thread);
+	pthread_join(worker_thread, NULL);
+	Log("ADC_StreamStop::Go() exiting");
 	return *this;
 };
 
@@ -1041,7 +1048,7 @@ string TMessage::AsString(bool bAsReply)
 	stringstream dest;
 	TBytes raw = this->AsBytes(bAsReply);
 	Trace("TMessage, Raw Bytes: ", raw);
-	dest << "Message = MId:" << this->getMId() << ", DataItems: " << DataItems.size();
+	dest << "Message = MId:" << this->getMId() << ", DataItems: " << DataItems.size()<< ", Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
 	if (DataItems.size() != 0)
 	{
 		for (int itemNumber = 0; itemNumber < DataItems.size(); itemNumber++)

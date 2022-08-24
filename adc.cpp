@@ -46,6 +46,7 @@ sem_t full;
 
 int AdcStreamingConnection = -1;
 
+pthread_t loggerID=-1;
 
 void *log_main(void *arg)
 {
@@ -66,6 +67,7 @@ void *log_main(void *arg)
 		ring_read_index++;
 		ring_read_index %= RING_BUFFER_SLOTS;
 	};
+	loggerID = -1;
 	Log("Thread ended (?)");
 }
 
@@ -92,8 +94,10 @@ void *worker_main(void *arg)
 	}
 	try
 	{
-		pthread_create(&logger_thread, NULL, &log_main, conn_fd);
-
+		if (loggerID == -1){
+			Log("No Logger Thread Found: Starting Logger thread.");
+			loggerID = pthread_create(&logger_thread, NULL, &log_main, conn_fd);
+		}
 		while (!AdcStreamTerminate)
 		{
 			status = apci_dma_data_ready(apci, 1, &first_slot, &num_slots, &data_discarded);
@@ -109,7 +113,8 @@ void *worker_main(void *arg)
 				status = apci_wait_for_irq(apci, 1); // thread blocking
 				if (status)
 				{
-					Error("  Worker Thread: Error waiting for IRQ\n");
+					AdcStreamTerminate = 1;
+					Error("  Worker Thread: Error waiting for IRQ; status: " + std::to_string(status));
 					break;
 				}
 				continue;
@@ -132,8 +137,9 @@ void *worker_main(void *arg)
 	{
 		Error(e.what());
 	}
-	pthread_cancel(logger_thread);
-	pthread_join(logger_thread, NULL);
-	AdcStreamingConnection = -1;
+	Log("Setting AdcStreamingConnection to idle; closing Logger thread");
+	// pthread_cancel(logger_thread);
+	// pthread_join(logger_thread, NULL);
+	Log("Closed Logger thread");
 	return 0;
 }
