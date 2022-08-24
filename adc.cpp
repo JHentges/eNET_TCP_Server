@@ -58,8 +58,8 @@ void *log_main(void *arg)
 		sem_wait(&full);
 		pthread_mutex_lock(&mutex);
 
-		send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
-
+		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
+		std::cout << sent << " ADC bytes sent" << std::endl;
 		pthread_mutex_unlock(&mutex);
 		sem_post(&empty);
 
@@ -105,7 +105,7 @@ void *worker_main(void *arg)
 
 			if (num_slots == 0) // Worker Thread: No data pending; Waiting for IRQ
 			{
-				Log("no data yet, blocking");
+				//Log("no data yet, blocking");
 				status = apci_wait_for_irq(apci, 1); // thread blocking
 				if (status)
 				{
@@ -134,6 +134,6 @@ void *worker_main(void *arg)
 	}
 	pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);
+	AdcStreamingConnection = -1;
 	return 0;
-
 }

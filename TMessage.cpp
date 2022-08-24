@@ -40,11 +40,11 @@ TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
-	{REG_Read1, 1, 1, 1, construct<TREG_Read1>, "REG_Read1(__u8 offset) → [__u8 or __u32]"},
+	{REG_Read1, 1, 1, 1, construct<TREG_Read1>, "REG_Read1(u8 offset) → [u8|u32]"},
 	DIdNYI(REG_ReadAll),
 	DIdNYI(REG_ReadSome),
 	DIdNYI(REG_ReadBuf),
-	{REG_Write1, 2, 5, 5, construct<TREG_Write1>, "REG_Write1(__u8 offset, [__u8 or __u32] value)"},
+	{REG_Write1, 2, 5, 5, construct<TREG_Write1>, "REG_Write1(u8 offset, [u8|u32] value)"},
 	DIdNYI(REG_WriteSome),
 	DIdNYI(REG_WriteBuf),
 	DIdNYI(REG_ClearBits),
@@ -52,7 +52,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(REG_ToggleBits),
 
 	{DAC_, 0, 0, 0, construct<TDataItem>, "TDataItemBase (DAC_)"},
-	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(__u8 iDAC, single Volts)"},
+	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(u8 iDAC, single Volts)"},
 	DIdNYI(DAC_OutputAll),
 	DIdNYI(DAC_OutputSome),
 	DIdNYI(DAC_Configure1),
@@ -716,7 +716,6 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	AdcStreamTerminate = 0;
 	Log("Starting ADC Streaming Worker Thread");
 	pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
-	sleep(1);
 	apci_start_dma(apci);
 	return *this;
 };
