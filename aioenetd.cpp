@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
 	if(argc <2){
 
 		Log("Warning: no tcp port specified.  Using default: "+std::to_string(listenPort_Control));
-		Log(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen}\n(i.e., " + std::string(argv[0]) + " 8080"));
+		Log(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen — (i.e., 8080}"));
 	}
 	else
 		sscanf(argv[1], "%d", &listenPort_Control);
@@ -389,7 +389,7 @@ int main(int argc, char *argv[])
 				// handle xmit error
 			}else
 			{
-				Log("sent ADC Client# "+std::to_string(new_socket)+" the connection ID: "+std::to_string(new_socket)+" (ORed with 0x80000000)");
+				Log("sent Control Client# Hello Message: "+ HelloControl.AsString());
 			}
 		}
 
@@ -519,7 +519,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		for (auto adcClient : ControlClientList) // TODO: FIX: should be handled by each read-thread
+		for (auto adcClient : AdcStreamClientList) // TODO: FIX: should be handled by each read-thread
 		{
 			if (FD_ISSET( adcClient, &ControlReadfds))
 			{
