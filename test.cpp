@@ -13,11 +13,11 @@ int logtest(const source_location &loc = source_location::current())
     Trace(std::string("Foo! Trace-level Message"));
     Error("Frack! ERROR!");
     TBytes aBytes{0, 1, 88, 255};
-    TraceBytes("intro: ", aBytes);
-    ErrorBytes(std::string("intro2: "), aBytes);
-    ErrorBytes(std::string("multi-output: "), aBytes, false);
+    Trace("intro: ", aBytes);
+    Error(std::string("intro2: "), aBytes);
+    Error(std::string("multi-output: "), aBytes, false);
     Log(" more");
-    Log(" yetMore", true);
+    Log(" yetMore");
     return 0;
 }
 

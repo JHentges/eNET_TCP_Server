@@ -20,6 +20,7 @@ const vector<TMessageId> ValidMessageIDs{
 	'R', // Response, no errors
 	'X', // response, error, syntaX
 	'E', // response, Error, semantic or operational (hardware)
+	'H', // Hello Message
 };
 
 // crap function returns 8 or 32 for valid offsets into eNET-AIO's register map, or 0 for invalid
@@ -125,7 +126,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(ADC_RawAll),
 	DIdNYI(ADC_RawSome),
 
-	{ADC_StreamStart, 0, 0, 0, construct<TADC_StreamStart>, "ADC_StreamStart()"},
+	{ADC_StreamStart, 0, 4, 4, construct<TADC_StreamStart>, "ADC_StreamStart((u32)AdcConnectionId)"},
 	{ADC_StreamStop, 0, 0, 0, construct<TADC_StreamStop>, "ADC_StreamStop()"},
 
 	DIdNYI(ADC_Streaming_stuff_including_Hz_config),
@@ -136,6 +137,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(DEF_),
 	DIdNYI(SERVICE_),
 	DIdNYI(TCP_),
+	{TCP_Hello, 0, 4, 255, construct<TDataItem>, "TDataItem TCP_Hello"},
 	DIdNYI(PNP_),
 	DIdNYI(CFG_),
 	// etc.  Need to list all the ones we care about soon, and all (of the ones we keep), eventually.
@@ -682,7 +684,14 @@ TADC_StreamStart::TADC_StreamStart() {
 TADC_StreamStart::TADC_StreamStart(TBytes buf)
 {
 	this->setDId(ADC_StreamStart);
-	GUARD(buf.size() == 0, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
+	GUARD((buf.size() == 0) || (buf.size() == 4), ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
+
+	if (buf.size() == 4)
+	{
+		if (-1 == AdcStreamingConnection)
+			AdcStreamingConnection = (int)*(__u32 *)buf.data();
+	}
+	Log("AdcStreamingConnection: "+std::to_string(AdcStreamingConnection));
 }
 
 TBytes TADC_StreamStart::AsBytes(bool bAsReply)
@@ -699,22 +708,19 @@ TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 TADC_StreamStart &TADC_StreamStart::Go()
 {
 	Log("ADC_StreamStart::Go()");
-	if (-1 != AdcStreamingConnection)
+	if (-1 == AdcStreamingConnection)
 	{
-		Error("Attempt to start ADC from Client:"+std::to_string(this->conn)+" while already started from Client: "+std::to_string(AdcStreamingConnection));
-		throw logic_error(err_msg[-ERR_ADC_BUSY]);
+		AdcStreamingConnection = this->conn;
 	}
-	AdcStreamingConnection = this->conn;
-
+	Log("ADC Streaming Data will be sent on ConnectionID: "+std::to_string(AdcStreamingConnection));
 	auto status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
 	if (status)
 	{
 		Error("Error setting apci_dma_transfer_size: "+std::to_string(status));
 		throw logic_error(err_msg[-status]);
 	}
-	//initAdc();
+
 	AdcStreamTerminate = 0;
-	Log("Starting ADC Streaming Worker Thread");
 	pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
 	apci_start_dma(apci);
 	return *this;
@@ -976,7 +982,7 @@ TMessage::TMessage(TBytes Msg)
 };
 TMessage &TMessage::setConnection(int aClient)
 {
-
+	Trace("TMessage");
 	this->conn = aClient;
 	for(auto anItem : this->DataItems)
 		anItem->setConnection(aClient);
@@ -984,19 +990,19 @@ TMessage &TMessage::setConnection(int aClient)
 }
 TMessageId TMessage::getMId()
 {
-
+	Trace("TMessage");
 	return this->Id;
 }
 
 TCheckSum TMessage::getChecksum(bool bAsReply)
 {
-
+	Trace("TMessage");
 	return TMessage::calculateChecksum(this->AsBytes(bAsReply));
 }
 
 TMessage &TMessage::setMId(TMessageId ID)
 {
-
+	Trace("TMessage MId=" + std::to_string(ID));
 	if (!isValidMessageID(ID))
 		throw logic_error("ERR_MSG_ID_UNKNOWN"); // TODO: FIX using TError
 	this->Id = ID;
@@ -1048,7 +1054,7 @@ string TMessage::AsString(bool bAsReply)
 	stringstream dest;
 	TBytes raw = this->AsBytes(bAsReply);
 	Trace("TMessage, Raw Bytes: ", raw);
-	dest << "Message = MId:" << this->getMId() << ", DataItems: " << DataItems.size()<< ", Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
+	dest << "Message = MId:" << this->getMId() << ", csum: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back())<< ", DataItems: " << DataItems.size();
 	if (DataItems.size() != 0)
 	{
 		for (int itemNumber = 0; itemNumber < DataItems.size(); itemNumber++)
@@ -1057,14 +1063,7 @@ string TMessage::AsString(bool bAsReply)
 			dest << endl
 				 << "    " << item->AsString(bAsReply);
 		}
-		// for (TDataItem item : this->DataItems)
-		// {
-		// 	dest << endl
-		// 			<< "  " << item.AsString();
-		// }
 	}
-	dest << endl
-		 << "    Checksum byte: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back());
 	return dest.str();
 }
 

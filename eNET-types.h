@@ -219,7 +219,8 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	WDG_ = 0x4000, // Watchdog related
 	DEF_ = 0x5000, // power-on default state related
 	SERVICE_,	   // tech support stuff
-	TCP_,		   // TCP-IP stuff broken out from the
+	TCP_ = 0x7000,		   // TCP-IP stuff broken out from the
+	TCP_Hello = 0x7001,
 	PNP_,		   // distinct from BRD_?
 	CFG_,		   // "Other" Configuration stuff; Linux, IIoT protocol selection, etc?
 };

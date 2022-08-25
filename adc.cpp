@@ -60,7 +60,6 @@ void *log_main(void *arg)
 		pthread_mutex_lock(&mutex);
 
 		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
-		std::cout << sent << " ADC bytes sent" << std::endl;
 		pthread_mutex_unlock(&mutex);
 		sem_post(&empty);
 
