@@ -1,0 +1,3 @@
+[submodule "apci-eNET"]
+	path = apci-eNET
+	url = git@github.com:/accesio/apci-eNET.git
