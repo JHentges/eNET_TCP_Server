@@ -216,6 +216,7 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include <netdb.h>
 #include <fcntl.h>
 #include <strings.h>
+#include <algorithm>
 
 #define LOGGING_DISABLE
 
