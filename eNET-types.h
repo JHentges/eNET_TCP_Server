@@ -220,7 +220,7 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	DEF_ = 0x5000, // power-on default state related
 	SERVICE_,	   // tech support stuff
 	TCP_ = 0x7000,		   // TCP-IP stuff broken out from the
-	TCP_Hello = 0x7001,
+	TCP_ConnectionID = 0x7001,
 	PNP_,		   // distinct from BRD_?
 	CFG_,		   // "Other" Configuration stuff; Linux, IIoT protocol selection, etc?
 };

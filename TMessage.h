@@ -377,6 +377,9 @@ public:
 
 	// 4) Diagnostic
 	virtual std::string AsString(bool bAsReply = false);
+
+protected:
+	int argConnectionID = -1;
 };
 
 class TADC_StreamStop : public TDataItem

@@ -62,6 +62,7 @@ void *log_main(void *arg)
 		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
 		pthread_mutex_unlock(&mutex);
 		sem_post(&empty);
+		Trace("Sent ADC Data "+std::to_string(sent)+" bytes, on ConnectionID: "+std::to_string(conn));
 
 		ring_read_index++;
 		ring_read_index %= RING_BUFFER_SLOTS;
@@ -112,13 +113,17 @@ void *worker_main(void *arg)
 				status = apci_wait_for_irq(apci, 1); // thread blocking
 				if (status)
 				{
+					status = errno;
 					AdcStreamTerminate = 1;
-					Error("  Worker Thread: Error waiting for IRQ; status: " + std::to_string(status));
+					if (status != -ECANCELED)  // "canceled" is not an error but we do want to close this thread
+						Error("  Worker Thread: Error waiting for IRQ; status: " + std::to_string(status)+", "+strerror(status));
+					else
+						Trace("  Thread canceled.");
 					break;
 				}
 				continue;
 			}
-
+			Trace("Taking ADC Data block(s)");
 			for (int i = 0; i < num_slots; i++)
 			{
 				sem_wait(&empty);

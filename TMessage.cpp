@@ -137,7 +137,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(DEF_),
 	DIdNYI(SERVICE_),
 	DIdNYI(TCP_),
-	{TCP_Hello, 0, 4, 255, construct<TDataItem>, "TDataItem TCP_Hello"},
+	{TCP_ConnectionID, 0, 4, 255, construct<TDataItem>, "TDataItem TCP_ConnectionID"},
 	DIdNYI(PNP_),
 	DIdNYI(CFG_),
 	// etc.  Need to list all the ones we care about soon, and all (of the ones we keep), eventually.
@@ -689,7 +689,15 @@ TADC_StreamStart::TADC_StreamStart(TBytes buf)
 	if (buf.size() == 4)
 	{
 		if (-1 == AdcStreamingConnection)
-			AdcStreamingConnection = (int)*(__u32 *)buf.data();
+		{
+			this->argConnectionID = (int)*(__u32 *)buf.data();
+			AdcStreamingConnection = this->argConnectionID;
+		}
+		else
+		{
+			Error("ADC Busy");
+			throw std::logic_error("ADC Busy already, on Connection: "+std::to_string(AdcStreamingConnection));
+		}
 	}
 	Log("AdcStreamingConnection: "+std::to_string(AdcStreamingConnection));
 }
@@ -699,8 +707,13 @@ TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 	this->setDId(ADC_StreamStart);
 	TBytes bytes;
 	this->pushDId(bytes);
-	int w = 0;
-	this->pushLen(bytes, w);
+	this->pushLen(bytes, 4);
+	auto con = this->argConnectionID;
+	for (int i = 0; i < sizeof(con); i++)
+	{
+		bytes.push_back(con & 0x000000FF);
+		con >>= 8;
+	}
 	Trace("TADC_StreamStart::AsBytes built: ", bytes);
 	return bytes;
 };
@@ -726,7 +739,18 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	return *this;
 };
 
-std::string TADC_StreamStart::AsString(bool bAsReply) { return "TADC_StreamStart();"; };
+std::string TADC_StreamStart::AsString(bool bAsReply)
+{
+	std::string msg = this->getDIdDesc();
+	if (bAsReply)
+	{
+		msg += "DataItem = ConnectionID = " + to_hex(this->argConnectionID);
+	}
+	return msg;
+};
+
+
+
 TADC_StreamStop::TADC_StreamStop(TBytes buf)
 {
 	this->setDId(ADC_StreamStop);

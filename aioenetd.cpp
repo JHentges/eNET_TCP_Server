@@ -1,7 +1,16 @@
 //aioenetd.cpp
 //Main source file for aioenetd, the systemd service/application
-// that listens to some TCP ports and provides the packet-level
-// interface to eNET- devices
+// that listens to some TCP ports and provides the packet-level interface to eNET- devices
+
+/*
+	when a connection to ~8080 (the "control" connection port) occurs send a Hello 'H' TMessage with several TDataItems.
+		At least one data item is the ConnectionID, others may include PID, Model#, Serial#, what the onboard RTC thinks the time is, etc
+		DId 0x7001 "TCP_ConnectionID", 4 byte ConnectionID is the data
+	When a connection to ~8080+1 (the ADC Streaming connection port) occurs, send (__u32)(0x80000000|ConnectionID) ("Invalid ADC data value bit set + ConnectionID")
+
+	ADC_StreamStart() uses the connection it is received on as the output connection for ADC data;
+	ADC_StreamStart(ConnectionID) uses ConnectionID as the connection to stream ADC data on.
+*/
 
 /*[aioenetd Protocol 2 TCP-Listener/Server Daemon/Service implementation and concept notes]
 from discord code-review conversation with Daria; these do not belong in this source file:
@@ -367,8 +376,8 @@ int main(int argc, char *argv[])
 				exit(EXIT_FAILURE);
 			}
 
-			Log("New connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
-			Trace("Adding to list of sockets as " + std::to_string(ControlClientList.size()));
+			Log("New Control connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
+			Trace("Adding to list of Control sockets as " + std::to_string(ControlClientList.size()));
 			ControlClientList.push_back(new_socket);
 
 			// send "Hello" message on Control connection
@@ -377,7 +386,7 @@ int main(int argc, char *argv[])
 			TBytes data{};
 			for (int byt=0;byt<sizeof(new_socket); byt++)
 				data.push_back((new_socket >> (8*byt)) & 0x000000FF);
-			PTDataItem d2 = std::unique_ptr<TDataItem>(new TDataItem(TCP_Hello, data));
+			PTDataItem d2 = std::unique_ptr<TDataItem>(new TDataItem(TCP_ConnectionID, data));
 			Payload.push_back(d2);
 			TMessage HelloControl = TMessage(MId_Hello, Payload);
 
@@ -389,7 +398,7 @@ int main(int argc, char *argv[])
 				// handle xmit error
 			}else
 			{
-				Log("sent Control Client# Hello Message: "+ HelloControl.AsString());
+				Log("sent Control Client# Hello Message:\n"+ HelloControl.AsString());
 			}
 		}
 
@@ -405,7 +414,7 @@ int main(int argc, char *argv[])
 				if (bytesRead == 0) {
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&TCP_ControlAddress , (socklen_t*)&addrControlSize);
-					Log(std::string("Host disconnected, ip: ") + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
+					Log(std::string("Host disconnected Control connection, ip: ") + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
 					if (AdcStreamingConnection = aClient)
 					{
 						Log("terminating ADC Streaming");
@@ -433,7 +442,7 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
 						for (int i = 0; i < bytesRead; i++)
 							buf.push_back(buffer[i]);
-						Debug("Received " + std::to_string(buf.size())+" bytes; 1st byte (MId): "+to_hex((__u8)buffer[0])+", from ADC Client# " + std::to_string(aClient)+": ", buf);
+						Debug("Received " + std::to_string(buf.size())+" bytes; 1st byte (MId): "+to_hex((__u8)buffer[0])+", from Control Client# " + std::to_string(aClient)+": ", buf);
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
@@ -443,7 +452,7 @@ int main(int argc, char *argv[])
 						}
 						aMessage.setConnection(aClient);
 
-						Log("Received: " + aMessage.AsString());
+						Log("Received:\n  " + aMessage.AsString());
 
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
 						try
@@ -469,7 +478,7 @@ int main(int argc, char *argv[])
 							// handle xmit error
 						}else
 						{
-							Log("sent ADC Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
+							Log("sent Control Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
 						}
 					}
 					catch(std::logic_error e)
@@ -521,7 +530,7 @@ int main(int argc, char *argv[])
 
 		for (auto adcClient : AdcStreamClientList) // TODO: FIX: should be handled by each read-thread
 		{
-			if (FD_ISSET( adcClient, &ControlReadfds))
+			if (FD_ISSET( adcClient, &AdcStreamReadfds))
 			{
 				// Read the incoming message
 				bytesRead = read( adcClient , buffer, 1024);
@@ -530,7 +539,7 @@ int main(int argc, char *argv[])
 				if (bytesRead == 0) {
 					// Somebody disconnected, get his details and print
 					getpeername(adcClient, (struct sockaddr*)&TCP_AdcStreamAddress , (socklen_t*)&addrAdcStreamSize);
-					Log(std::string("Host disconnected, ip: ") + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
+					Log(std::string("Host disconnected ADC connection, ip: ") + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
 					if (AdcStreamingConnection = adcClient)
 					{
 						Log("terminating ADC Streaming");
@@ -549,7 +558,7 @@ int main(int argc, char *argv[])
 						// handle bad error: the for-each determined adcClient can't be found?!?!?
 					}
 				}
-				else // some bytes were read
+				else // Error: some bytes were read on the ADC Streaming Data output port, ignore them
 				{
 					try
 					{
@@ -558,44 +567,8 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
 						for (int i = 0; i < bytesRead; i++)
 							buf.push_back(buffer[i]);
-						Debug("Received " + std::to_string(buf.size())+" bytes; 1st byte (MId): "+to_hex((__u8)buffer[0])+", from Client# " + std::to_string(adcClient)+": ", buf);
-
-						auto aMessage = TMessage::FromBytes(buf, result);
-						if (result != ERR_SUCCESS)
-						{
-							Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
-							continue;
-						}
-						aMessage.setConnection(adcClient);
-
-						Log("Received: " + aMessage.AsString());
-
-						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
-						try
-						{
-							for (auto anItem : aMessage.DataItems)
-							{
-								anItem->Go();
-							}
-							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
-						}
-						catch(std::logic_error e)
-						{
-							aMessage.setMId('X');
-							Error(e.what());
-						}
-
-						Trace("Built Reply Message: \n" + aMessage.AsString(true));
-						TBytes rbuf = aMessage.AsBytes(true);
-						int bytesSent = send(adcClient, rbuf.data(), rbuf.size(), 0);
-						if (bytesSent == -1)
-						{
-							Error("\n\n ! TCP Send of Reply appears to have failed\n");
-							// handle xmit error
-						}else
-						{
-							Log("sent Client# "+std::to_string(adcClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
-						}
+						Error("ADC Stream Connection Received " + std::to_string(buf.size())+" bytes from Client# " + std::to_string(adcClient)+": ", buf);
+						Error("Ignoring Message");
 					}
 					catch(std::logic_error e)
 					{
