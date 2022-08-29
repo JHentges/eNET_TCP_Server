@@ -43,32 +43,46 @@ pthread_mutex_t mutex;
 sem_t empty;
 sem_t full;
 
+timespec AdcLogTimeout;
 
 int AdcStreamingConnection = -1;
 
-pthread_t loggerID=-1;
+int AdcLoggerThreadID = -1;
+int AdcWorkerThreadID = -1;
+
+int AdcLoggerTerminate = 0;
 
 void *log_main(void *arg)
 {
 	Log("Thread started");
+	AdcLogTimeout.tv_sec = 1;
 	int conn = *(int *)arg;
 	int ring_read_index = 0;
 
-	while (1)
+	while (! AdcLoggerTerminate)
 	{
-		sem_wait(&full);
+		clock_gettime(CLOCK_REALTIME, &AdcLogTimeout);
+		AdcLogTimeout.tv_sec++;
+		if (-1 == sem_timedwait(&full, &AdcLogTimeout)) // TODO: check for other Errors
+		{
+			if (errno == ETIMEDOUT)
+				continue;
+			Error("Unexpected error from sem_timedwait(), errno: " + std::to_string(errno) + ", " + strerror(errno));
+			break;
+		}
 		pthread_mutex_lock(&mutex);
 
 		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
 		pthread_mutex_unlock(&mutex);
 		sem_post(&empty);
-		Trace("Sent ADC Data "+std::to_string(sent)+" bytes, on ConnectionID: "+std::to_string(conn));
+		Trace("Sent ADC Data "+std::to_string(sent)+" bytes, on ConnectionID: "+std::to_string(AdcStreamingConnection));
 
 		ring_read_index++;
 		ring_read_index %= RING_BUFFER_SLOTS;
 	};
-	loggerID = -1;
-	Log("Thread ended (?)");
+	AdcLoggerThreadID = -1;
+	Log("Thread ended");
+	return 0;
 }
 
 void *worker_main(void *arg)
@@ -94,11 +108,12 @@ void *worker_main(void *arg)
 	}
 	try
 	{
-		if (loggerID == -1){
+		if (AdcLoggerThreadID == -1){
+			AdcLoggerTerminate = 0;
 			Log("No Logger Thread Found: Starting Logger thread.");
-			loggerID = pthread_create(&logger_thread, NULL, &log_main, conn_fd);
+			AdcLoggerThreadID = pthread_create(&logger_thread, NULL, &log_main, conn_fd);
 		}
-		while (!AdcStreamTerminate)
+		while (1)
 		{
 			status = apci_dma_data_ready(apci, 1, &first_slot, &num_slots, &data_discarded);
 			if ((data_discarded != 0) || status)
@@ -114,11 +129,13 @@ void *worker_main(void *arg)
 				if (status)
 				{
 					status = errno;
-					AdcStreamTerminate = 1;
-					if (status != -ECANCELED)  // "canceled" is not an error but we do want to close this thread
-						Error("  Worker Thread: Error waiting for IRQ; status: " + std::to_string(status)+", "+strerror(status));
+					if (status != ECANCELED)  // "canceled" is not an error but we do want to close this thread
+						Error("  Worker Thread: Error waiting for IRQ; status: " + std::to_string(status) + ", " + strerror(status));
 					else
 						Trace("  Thread canceled.");
+
+					AdcStreamTerminate = 1;
+					AdcLoggerTerminate = 1;
 					break;
 				}
 				continue;
@@ -141,9 +158,9 @@ void *worker_main(void *arg)
 	{
 		Error(e.what());
 	}
-	Log("Setting AdcStreamingConnection to idle; closing Logger thread");
+	Trace("Setting AdcStreamingConnection to idle");
 	// pthread_cancel(logger_thread);
-	// pthread_join(logger_thread, NULL);
-	Log("Closed Logger thread");
+	pthread_join(logger_thread, NULL);
+	Log("\n\nADC Log Thread exiting\n\n");
 	return 0;
 }

@@ -734,7 +734,11 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	}
 
 	AdcStreamTerminate = 0;
-	pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
+	if (AdcWorkerThreadID == -1)
+	{
+		Trace("Creating new ADC Worker Thread");
+		AdcWorkerThreadID = pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
+	}
 	apci_start_dma(apci);
 	return *this;
 };
@@ -765,7 +769,7 @@ TBytes TADC_StreamStop::AsBytes(bool bAsReply)
 	this->pushDId(bytes);
 	int w = 0;
 	this->pushLen(bytes, w);
-	Trace("TADC_StreamStart::AsBytes built: ", bytes);
+	Trace("TADC_StreamStop::AsBytes built: ", bytes);
 	return bytes;
 };
 
@@ -775,8 +779,9 @@ TADC_StreamStop &TADC_StreamStop::Go()
 	AdcStreamTerminate = 1;
 	apci_cancel_irq(apci, 1);
 	AdcStreamingConnection = -1;
-	pthread_cancel(worker_thread);
-	pthread_join(worker_thread, NULL);
+	AdcWorkerThreadID = -1;
+	// pthread_cancel(worker_thread);
+	// pthread_join(worker_thread, NULL);
 	Log("ADC_StreamStop::Go() exiting");
 	return *this;
 };
