@@ -228,7 +228,8 @@ from discord code-review conversation with Daria; these do not belong in this so
 int listenPort_Control = 8080;
 int listenPort_AdcStream = listenPort_Control + 1;
 
-#define DEVICEPATH "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
+#define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
+#define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
 int apci = 0;
 
 
@@ -266,8 +267,14 @@ int main(int argc, char *argv[])
 
 	apci = open(DEVICEPATH, O_RDONLY); // TODO: FIX: open the ONLY file in /dev/apci/ instead of a #defined filename
 	if(apci < 0){
-		Error("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file");
-		exit(-2);
+
+		apci = open(DEVICEPATH_FALLBACK, O_RDONLY);
+		if(apci < 0)
+		{
+			Error("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file");
+			exit(-2);
+		}
+		Debug("Used fallback device path: " DEVICEPATH_FALLBACK);
 	}
 
 	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
