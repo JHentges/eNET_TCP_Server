@@ -75,7 +75,7 @@ void *log_main(void *arg)
 		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
 		pthread_mutex_unlock(&mutex);
 		sem_post(&empty);
-		Trace("Sent ADC Data "+std::to_string(sent)+" bytes, on ConnectionID: "+std::to_string(AdcStreamingConnection));
+		Trace("Sent ADC Data "+std::to_string(sent)+" bytes, on ConnectionID: "+std::to_string(conn));
 
 		ring_read_index++;
 		ring_read_index %= RING_BUFFER_SLOTS;

@@ -6,9 +6,8 @@
 	when a connection to ~8080 (the "control" connection port) occurs send a Hello 'H' TMessage with several TDataItems.
 		At least one data item is the ConnectionID, others may include PID, Model#, Serial#, what the onboard RTC thinks the time is, etc
 		DId 0x7001 "TCP_ConnectionID", 4 byte ConnectionID is the data
-	When a connection to ~8080+1 (the ADC Streaming connection port) occurs, send (__u32)(0x80000000|ConnectionID) ("Invalid ADC data value bit set + ConnectionID")
+	When a connection to ~8080+1 (the ADC Streaming port) occurs, send (__u32)(0x80000000|ConnectionID) ("Invalid ADC data value bit set + ConnectionID")
 
-	ADC_StreamStart() uses the connection it is received on as the output connection for ADC data;
 	ADC_StreamStart(ConnectionID) uses ConnectionID as the connection to stream ADC data on.
 */
 
@@ -274,7 +273,7 @@ int main(int argc, char *argv[])
 			Error("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file");
 			exit(-2);
 		}
-		Debug("Used fallback device path: " DEVICEPATH_FALLBACK);
+		Trace("Used fallback device path: " DEVICEPATH_FALLBACK);
 	}
 
 	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
@@ -401,11 +400,11 @@ int main(int argc, char *argv[])
 			int bytesSent = send(new_socket, rbuf.data(), rbuf.size(), 0);
 			if (bytesSent == -1)
 			{
-				Error("\n\n ! TCP Send of Control Hello appears to have failed\n");
+				Error("! TCP Send of Control Hello appears to have failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
 				// handle xmit error
 			}else
 			{
-				Log("sent Control Client# Hello Message:\n"+ HelloControl.AsString());
+				Log("Sent 'Hello' to Control Client#:\n"+ HelloControl.AsString());
 			}
 		}
 
@@ -449,7 +448,7 @@ int main(int argc, char *argv[])
 						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
 						for (int i = 0; i < bytesRead; i++)
 							buf.push_back(buffer[i]);
-						Debug("Received " + std::to_string(buf.size())+" bytes; 1st byte (MId): "+to_hex((__u8)buffer[0])+", from Control Client# " + std::to_string(aClient)+": ", buf);
+						Debug("Received " + std::to_string(buf.size())+" bytes, from Control Client# " + std::to_string(aClient)+": ", buf);
 
 						auto aMessage = TMessage::FromBytes(buf, result);
 						if (result != ERR_SUCCESS)
@@ -457,7 +456,6 @@ int main(int argc, char *argv[])
 							Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
 							continue;
 						}
-						aMessage.setConnection(aClient);
 
 						Log("Received:\n  " + aMessage.AsString());
 
@@ -476,16 +474,16 @@ int main(int argc, char *argv[])
 							Error(e.what());
 						}
 
-						Trace("Built Reply Message: \n" + aMessage.AsString(true));
+						Log("Control Reply Message: \n" + aMessage.AsString(true));
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
 						{
-							Error("\n\n ! TCP Send of Reply appears to have failed\n");
+							Error("! TCP Send of Reply to Control failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
 							// handle xmit error
 						}else
 						{
-							Log("sent Control Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
+							Log("sent Reply to Control Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
 						}
 					}
 					catch(std::logic_error e)
@@ -507,7 +505,7 @@ int main(int argc, char *argv[])
 		AdcStreamActivity = select( 1023, &AdcStreamReadfds, NULL, NULL, &timeout);
 		if ((AdcStreamActivity < 0) && (errno != EINTR))
 		{
-			Error("select error on Adc Streaming");
+			Error("select error on ADC Streaming");
 		}
 		if (FD_ISSET(AdcStreamSocket, &AdcStreamReadfds)) // TODO: FIX: this condition should spawn a new read-thread
 		{
@@ -518,7 +516,7 @@ int main(int argc, char *argv[])
 				exit(EXIT_FAILURE);
 			}
 
-			Log("New ADC Stream connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
+			Trace("New ADC Stream connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
 			Trace("Adding to list of ADC Stream sockets as " + std::to_string(AdcStreamClientList.size()));
 			AdcStreamClientList.push_back(new_socket);
 
@@ -527,11 +525,11 @@ int main(int argc, char *argv[])
 			int bytesSent = send(new_socket, &HelloAdc, 4, 0);
 			if (bytesSent == -1)
 			{
-				Error("\n\n ! TCP Send of ADC Hello appears to have failed\n");
+				Error("! TCP Send of ADC Hello appears to have failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(sizeof(HelloAdc)) + ")");
 				// handle xmit error
 			}else
 			{
-				Log("sent ADC Client# "+std::to_string(new_socket)+" the connection ID: "+std::to_string(new_socket)+" (ORed with 0x80000000)");
+				Log("sent 'Hello' to ADC Client# " + std::to_string(new_socket) + ", the connection ID: " + std::to_string(new_socket) + " (ORed with 0x80000000)");
 			}
 		}
 

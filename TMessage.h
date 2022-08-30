@@ -204,7 +204,6 @@ public:
 
 	// index into DIdList; TODO: kinda belongs in a DIdList class method...
 	static int getDIdIndex(DataItemIds DId);
-	TDataItem &setConnection(int connection);
 	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
 	virtual TBytes AsBytes(bool bAsReply=false);
 
@@ -439,7 +438,6 @@ public:
 	}
 
 public:
-	TMessage &setConnection(int aClient);
 	TMessage() = default;
 	TMessage(TMessageId MId);
 	TMessage(TMessageId MId, TPayload Payload);

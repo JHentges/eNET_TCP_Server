@@ -8,7 +8,6 @@ Upcoming change to centralize the construction of serialized data items:
 */
 
 
-
 #include <unistd.h>
 #include <cstdlib>
 #include <stdexcept>
@@ -30,8 +29,8 @@ const vector<TMessageId> ValidMessageIDs{
 // to client
 	'R', // Response, no errors
 	'X', // response, error, syntaX
-	'E', // response, Error, semantic or operational (hardware)
-	'H', // Hello Message
+	'E', // response, Error, semantic (e.g., "out of range" in an argument ), or operational (e.g., hardware timeout)
+	'H', // Hello
 };
 
 // crap function returns 8 or 32 for valid offsets into eNET-AIO's register map, or 0 for invalid
@@ -137,7 +136,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(ADC_RawAll),
 	DIdNYI(ADC_RawSome),
 
-	{ADC_StreamStart, 0, 4, 4, construct<TADC_StreamStart>, "ADC_StreamStart((u32)AdcConnectionId)"},
+	{ADC_StreamStart, 4, 4, 4, construct<TADC_StreamStart>, "ADC_StreamStart((u32)AdcConnectionId)"},
 	{ADC_StreamStop, 0, 0, 0, construct<TADC_StreamStop>, "ADC_StreamStop()"},
 
 	DIdNYI(ADC_Streaming_stuff_including_Hz_config),
@@ -349,12 +348,6 @@ TDataItem::TDataItem(DataItemIds DId, TBytes bytes)
 TDataItem &TDataItem::addData(__u8 aByte)
 {
 	Data.push_back(aByte);
-	return *this;
-}
-
-TDataItem &TDataItem::setConnection(int aClient)
-{
-	this->conn = aClient;
 	return *this;
 }
 
@@ -710,7 +703,7 @@ TADC_StreamStart::TADC_StreamStart(TBytes buf)
 			throw std::logic_error("ADC Busy already, on Connection: "+std::to_string(AdcStreamingConnection));
 		}
 	}
-	Log("AdcStreamingConnection: "+std::to_string(AdcStreamingConnection));
+	Trace("AdcStreamingConnection: "+std::to_string(AdcStreamingConnection));
 }
 
 TBytes TADC_StreamStart::AsBytes(bool bAsReply)
@@ -731,12 +724,8 @@ TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 
 TADC_StreamStart &TADC_StreamStart::Go()
 {
-	Log("ADC_StreamStart::Go()");
-	if (-1 == AdcStreamingConnection)
-	{
-		AdcStreamingConnection = this->conn;
-	}
-	Log("ADC Streaming Data will be sent on ConnectionID: "+std::to_string(AdcStreamingConnection));
+	Trace("ADC_StreamStart::Go()");
+	Trace("ADC Streaming Data will be sent on ConnectionID: "+std::to_string(AdcStreamingConnection));
 	auto status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
 	if (status)
 	{
@@ -786,14 +775,14 @@ TBytes TADC_StreamStop::AsBytes(bool bAsReply)
 
 TADC_StreamStop &TADC_StreamStop::Go()
 {
-	Log("ADC_StreamStop::Go(): terminating ADC Streaming");
+	Trace("ADC_StreamStop::Go(): terminating ADC Streaming");
 	AdcStreamTerminate = 1;
 	apci_cancel_irq(apci, 1);
 	AdcStreamingConnection = -1;
 	AdcWorkerThreadID = -1;
 	// pthread_cancel(worker_thread);
 	// pthread_join(worker_thread, NULL);
-	Log("ADC_StreamStop::Go() exiting");
+	Trace("ADC_StreamStop::Go() exiting");
 	return *this;
 };
 
@@ -1020,14 +1009,7 @@ TMessage::TMessage(TBytes Msg)
 	if (result != ERR_SUCCESS)
 		throw logic_error(err_msg[-result]);
 };
-TMessage &TMessage::setConnection(int aClient)
-{
-	Trace("TMessage");
-	this->conn = aClient;
-	for(auto anItem : this->DataItems)
-		anItem->setConnection(aClient);
-	return *this;
-}
+
 TMessageId TMessage::getMId()
 {
 	Trace("TMessage");
