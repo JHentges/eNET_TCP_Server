@@ -185,7 +185,8 @@ from discord code-review conversation with Daria; these do not belong in this so
 
 
  */
-
+#include <chrono>
+#include <ctime>
 #include <string>
 #include <vector>
 #include <queue>
@@ -223,42 +224,35 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "adc.h"
 #include "apcilib.h"
 
-
-int listenPort_Control = 8080;
-int listenPort_AdcStream = listenPort_Control + 1;
+#define VersionString "0.1"
 
 #define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
 #define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
 int apci = 0;
-
-
 bool bTERMINATE = false;
 
-//#define LOG_FILE_NAME "protocol_log.txt"
+int listenPort_Control = 18767; // TODO: FIX: move into config file
+int listenPort_AdcStream = listenPort_Control + 1;
 
-//------------------- Signal---------------------------
-
-static void sig_handler(int sig)
-{
-	printf("signal %d detected; exiting\n\n", sig);
-	close(apci);
-	exit(0);
-}
-//---------------------End signal -----------------------
-
-std::vector<int> ControlClientList;
-std::vector<int> AdcStreamClientList;
-TBytes buf;
-char buffer[1025]; // data buffer of 1K // TODO: FIX: there shouldn't be both a byte array and a vector; resolve
+static void sig_handler(int sig);
 
 int main(int argc, char *argv[])
 {
-	Log("AIOeNET Daemon STARTING");
+	std::vector<int> ControlClientList;
+	std::vector<int> AdcStreamClientList;
+
+	TBytes buf;
+	char buffer[1025]; // data buffer of 1K // TODO: FIX: there shouldn't be both a byte array and a vector; resolve
+
 	signal(SIGINT, sig_handler);
+
+	std::time_t start_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	Log("AIOeNET Daemon "  VersionString " STARTING, it is now: " + std::string(std::ctime(&start_time)));
+
 	if(argc <2){
 
 		Log("Warning: no tcp port specified.  Using default: "+std::to_string(listenPort_Control));
-		Log(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen — (i.e., 8080}"));
+		Trace(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen — (i.e., 18767)}"));
 	}
 	else
 		sscanf(argv[1], "%d", &listenPort_Control);
@@ -413,29 +407,27 @@ int main(int argc, char *argv[])
 		{
 			if (FD_ISSET( aClient, &ControlReadfds))
 			{
-				// Read the incoming message
-				bytesRead = read( aClient , buffer, 1024);
+				bytesRead = read( aClient , buffer, 1024);// Read the incoming message
 
-				// if zero bytes were read, close the socket // FIX: should terminate the read-thread but not the ADC threads
-				if (bytesRead == 0) {
+				if (bytesRead == 0) { // if zero bytes were read, close the socket
 					// Somebody disconnected, get his details and print
 					getpeername(aClient , (struct sockaddr*)&TCP_ControlAddress , (socklen_t*)&addrControlSize);
 					Log(std::string("Host disconnected Control connection, ip: ") + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
 					if (AdcStreamingConnection = aClient)
 					{
-						Log("terminating ADC Streaming");
-						apci_cancel_irq(apci, 1);
+						Trace("terminating ADC Streaming");
 						AdcStreamTerminate = 1;
+						apci_cancel_irq(apci, 1);
 						AdcStreamingConnection = -1;
-						pthread_cancel(worker_thread);
-						pthread_join(worker_thread, NULL);
+						//pthread_cancel(worker_thread);
+						//pthread_join(worker_thread, NULL);
 					}
-					// Close the socket and mark as 0 in list for reuse
 					close( aClient );
 					auto index = find(ControlClientList.begin(), ControlClientList.end(), aClient);
 					if (index != ControlClientList.end())
 						ControlClientList.erase(index);
 					else{
+						Error("INTERNAL ERROR: for-each connection didn't find connection in itself?!?");
 						// handle bad error: the for-each determined aClient can't be found???
 					}
 				}
@@ -457,7 +449,7 @@ int main(int argc, char *argv[])
 							continue;
 						}
 
-						Log("Received:\n  " + aMessage.AsString());
+						Log("Received on Control connection:\n          " + aMessage.AsString());
 
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
 						try
@@ -474,7 +466,7 @@ int main(int argc, char *argv[])
 							Error(e.what());
 						}
 
-						Log("Control Reply Message: \n" + aMessage.AsString(true));
+						Log("Control Reply Message built: \n          " + aMessage.AsString(true));
 						TBytes rbuf = aMessage.AsBytes(true);
 						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
 						if (bytesSent == -1)
@@ -483,7 +475,7 @@ int main(int argc, char *argv[])
 							// handle xmit error
 						}else
 						{
-							Log("sent Reply to Control Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
+							Trace("sent Reply to Control Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
 						}
 					}
 					catch(std::logic_error e)
@@ -537,33 +529,32 @@ int main(int argc, char *argv[])
 		{
 			if (FD_ISSET( adcClient, &AdcStreamReadfds))
 			{
-				// Read the incoming message
-				bytesRead = read( adcClient , buffer, 1024);
+				bytesRead = read( adcClient , buffer, 1024);  // Read the incoming message
 
-				// if zero bytes were read, close the socket // FIX: should terminate the read-thread and ADC thread
-				if (bytesRead == 0) {
-					// Somebody disconnected, get his details and print
+				if (bytesRead == 0) {  // if zero bytes were read, close the socket
 					getpeername(adcClient, (struct sockaddr*)&TCP_AdcStreamAddress , (socklen_t*)&addrAdcStreamSize);
 					Log(std::string("Host disconnected ADC connection, ip: ") + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
 					if (AdcStreamingConnection = adcClient)
 					{
-						Log("terminating ADC Streaming");
+						Trace("terminating ADC Streaming");
 						apci_cancel_irq(apci, 1);
 						AdcStreamTerminate = 1;
 						AdcStreamingConnection = -1;
-						pthread_cancel(worker_thread);
-						pthread_join(worker_thread, NULL);
+						//pthread_cancel(worker_thread);
+						//pthread_join(worker_thread, NULL);
 					}
-					// Close the socket and mark as 0 in list for reuse
 					close( adcClient );
 					auto index = find(AdcStreamClientList.begin(), AdcStreamClientList.end(), adcClient);
 					if (index != AdcStreamClientList.end())
 						AdcStreamClientList.erase(index);
 					else{
+						Error("INTERNAL ERROR: couldn't find closing connection in connection list?!?");
 						// handle bad error: the for-each determined adcClient can't be found?!?!?
 					}
 				}
-				else // Error: some bytes were read on the ADC Streaming Data output port, ignore them
+				else
+				// Error: some bytes were read on the ADC Streaming Data output port, ignore them
+				// the ADC Streaming connection is not supposed to receive anything
 				{
 					try
 					{
@@ -586,6 +577,15 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+
+//------------------- Signal---------------------------
+static void sig_handler(int sig)
+{
+	Error("signal " + std::to_string(sig) + " detected; exiting");
+	close(apci);
+	exit(0);
+}
+//---------------------End signal -----------------------
 
 
 

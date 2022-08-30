@@ -54,7 +54,7 @@ int AdcLoggerTerminate = 0;
 
 void *log_main(void *arg)
 {
-	Log("Thread started");
+	Trace("Thread started");
 	AdcLogTimeout.tv_sec = 1;
 	int conn = *(int *)arg;
 	int ring_read_index = 0;
@@ -81,13 +81,13 @@ void *log_main(void *arg)
 		ring_read_index %= RING_BUFFER_SLOTS;
 	};
 	AdcLoggerThreadID = -1;
-	Log("Thread ended");
+	Trace("Thread ended");
 	return 0;
 }
 
 void *worker_main(void *arg)
 {
-	Log("Thread started");
+	Trace("Thread started");
 	int *conn_fd = (int *)arg;
 	int num_slots, first_slot, data_discarded, status = 0;
 
@@ -110,7 +110,7 @@ void *worker_main(void *arg)
 	{
 		if (AdcLoggerThreadID == -1){
 			AdcLoggerTerminate = 0;
-			Log("No Logger Thread Found: Starting Logger thread.");
+			Trace("No Logger Thread Found: Starting Logger thread.");
 			AdcLoggerThreadID = pthread_create(&logger_thread, NULL, &log_main, conn_fd);
 		}
 		while (1)
@@ -118,7 +118,7 @@ void *worker_main(void *arg)
 			status = apci_dma_data_ready(apci, 1, &first_slot, &num_slots, &data_discarded);
 			if ((data_discarded != 0) || status)
 			{
-				Log("first_slot: "+std::to_string(first_slot)+ "num_slots:" +
+				Error("first_slot: "+std::to_string(first_slot)+ "num_slots:" +
 				       std::to_string(num_slots)+ "+data_discarded:"+std::to_string(data_discarded) +"; status: " + std::to_string(status));
 			}
 
@@ -152,7 +152,7 @@ void *worker_main(void *arg)
 				apci_dma_data_done(apci, 1, 1);
 			}
 		}
-		Log("Thread ended (?)");
+		Trace("Thread ended");
 	}
 	catch(std::exception e)
 	{
@@ -161,6 +161,6 @@ void *worker_main(void *arg)
 	Trace("Setting AdcStreamingConnection to idle");
 	// pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);
-	Log("\n\nADC Log Thread exiting\n\n");
+	Trace("ADC Log Thread exiting.");
 	return 0;
 }

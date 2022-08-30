@@ -20,7 +20,7 @@ using namespace std;
 #include "apcilib.h"
 #include "eNET-AIO.h"
 #include "adc.h"
-//LOGGING_DISABLE_LEVEL(logging::Trace);
+
 const vector<TMessageId> ValidMessageIDs{
 // to server
 	'Q', // query/read
@@ -202,7 +202,7 @@ int TDataItem::getDIdIndex(DataItemIds DId)
 		if (DId == DIdList[index].DId){
 			return index;
 	}}
-	throw logic_error("DId not found in list");
+	throw std::logic_error("DId not found in list");
 }
 
 // returns human-readable description of this TDataItem
@@ -400,9 +400,7 @@ string TDataItem::AsString(bool bAsReply)
 	stringstream dest;
 
 	dest << "DataItem = DId:" << setfill('0') << hex << uppercase << setw(sizeof(TDataId) * 2) << this->getDId()
-		 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ":   ";
-
-	dest << "DataItem = " << this->getDIdDesc() << ", ";
+		 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ":   " << this->getDIdDesc() << ", ";
 
 	if (this->Data.size() != 0)
 	{
@@ -520,7 +518,7 @@ TREG_Read1 &TREG_Read1::setOffset(int ofs)
 	int w = widthFromOffset(ofs);
 	if (w == 0){
 		Error("Invalid offset");
-		throw logic_error("Invalid offset passed to TREG_Read1::setOffset");
+		throw std::logic_error("Invalid offset passed to TREG_Read1::setOffset");
 	}
 	this->offset = ofs;
 	this->width = w;
@@ -724,19 +722,17 @@ TBytes TADC_StreamStart::AsBytes(bool bAsReply)
 
 TADC_StreamStart &TADC_StreamStart::Go()
 {
-	Trace("ADC_StreamStart::Go()");
-	Trace("ADC Streaming Data will be sent on ConnectionID: "+std::to_string(AdcStreamingConnection));
+	Trace("ADC_StreamStart::Go(), ADC Streaming Data will be sent on ConnectionID: "+std::to_string(AdcStreamingConnection));
 	auto status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
 	if (status)
 	{
 		Error("Error setting apci_dma_transfer_size: "+std::to_string(status));
-		throw logic_error(err_msg[-status]);
+		throw std::logic_error(err_msg[-status]);
 	}
 
 	AdcStreamTerminate = 0;
 	if (AdcWorkerThreadID == -1)
 	{
-		Trace("Creating new ADC Worker Thread");
 		AdcWorkerThreadID = pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
 	}
 	apci_start_dma(apci);
@@ -1007,7 +1003,7 @@ TMessage::TMessage(TBytes Msg)
 	TError result = ERR_SUCCESS;
 	*this = TMessage::FromBytes(Msg, result); // CODE SMELL: this technique makes me question my existence
 	if (result != ERR_SUCCESS)
-		throw logic_error(err_msg[-result]);
+		throw std::logic_error(err_msg[-result]);
 };
 
 TMessageId TMessage::getMId()
@@ -1026,7 +1022,7 @@ TMessage &TMessage::setMId(TMessageId ID)
 {
 	Trace("TMessage MId=" + std::to_string(ID));
 	if (!isValidMessageID(ID))
-		throw logic_error("ERR_MSG_ID_UNKNOWN"); // TODO: FIX using TError
+		throw std::logic_error("ERR_MSG_ID_UNKNOWN"); // TODO: FIX using TError
 	this->Id = ID;
 
 	return *this;
@@ -1083,7 +1079,7 @@ string TMessage::AsString(bool bAsReply)
 		{
 			PTDataItem item = this->DataItems[itemNumber];
 			dest << endl
-				 << "    " << item->AsString(bAsReply);
+				 << "              " << item->AsString(bAsReply);
 		}
 	}
 	return dest.str();
