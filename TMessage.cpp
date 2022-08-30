@@ -1,3 +1,14 @@
+/* // TODO:
+Upcoming change to centralize the construction of serialized data items:
+
+1) renaming all derived classes' .AsBytes() to i.e.,  ".CalcPayload()" thus removing .AsBytes from all derived classes
+2) adding ".CalcPayload()" to the root class for zero-length DataItem convenience
+3) removing this->pushDId() and this->pushLen() related code from all the derived classes .CalcPayload() implementations
+4) write .AsBytes in the root class that pushes the DId, Len(Data), and Data
+*/
+
+
+
 #include <unistd.h>
 #include <cstdlib>
 #include <stdexcept>
