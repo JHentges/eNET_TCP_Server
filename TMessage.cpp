@@ -54,7 +54,7 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(REG_ReadAll),
 	DIdNYI(REG_ReadSome),
 	DIdNYI(REG_ReadBuf),
-	{REG_Write1, 2, 5, 5, construct<TREG_Write1>, "REG_Write1(u8 offset, [u8|u32] value)"},
+	{REG_Write1, 2, 5, 5, construct<TREG_Write1>, "REG_Write1(u8 ofs, [u8|u32] data)"},
 	DIdNYI(REG_WriteSome),
 	DIdNYI(REG_WriteBuf),
 	DIdNYI(REG_ClearBits),
@@ -280,7 +280,7 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
 	GUARD(isValidDataItemID(head->DId), ERR_DId_INVALID, head->DId);
-	// Trace("Got DId: " + to_hex((TDataId)head->DId));
+	// Trace("Got DId: " + to_hex<TDataId>(head->DId));
 
 	PTDataItem anItem;
 	TDataItemLength DataSize = head->dataLength; // MessageLength
@@ -300,11 +300,7 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 	}
 	for (auto entry : DIdList)
 		if (entry.DId == head->DId){
-			// Trace("TDataItem::fromBytes() found matching DId in DIdList and is calling .Construct(data)");
-
 			auto item = entry.Construct(data);
-
-			// Trace("DIdList[].Construct made this: " + item->AsString());
 			return item;
 		}
 	return PTDataItem(new TDataItem(head->DId, data));
@@ -316,7 +312,7 @@ TDataItem::TDataItem() : TDataItem{DataItemIds(_INVALID_DATAITEMID_)} {
 
 TDataItem::TDataItem(DataItemIds DId)
 {
-	Trace("ENTER, DId: " + to_hex((TDataId)DId));
+	Trace("ENTER, DId: " + to_hex<TDataId>(DId));
 	this->setDId(DId);
 };
 
@@ -355,7 +351,7 @@ TDataItem &TDataItem::setDId(DataItemIds DId)
 {
 	GUARD(isValidDataItemID(DId), ERR_MSG_DATAITEM_ID_UNKNOWN, DId);
 	this->Id = DId;
-	Trace("Set DId to " + to_hex((TDataId)this->Id));
+	Trace("Set DId to " + to_hex<TDataId>(this->Id));
 	return *this;
 }
 
@@ -399,8 +395,7 @@ string TDataItem::AsString(bool bAsReply)
 {
 	stringstream dest;
 
-	dest << "DataItem = DId:" << setfill('0') << hex << uppercase << setw(sizeof(TDataId) * 2) << this->getDId()
-		 << ", Data bytes: " << dec << setw(0) << this->Data.size() << ":   " << this->getDIdDesc() << ", ";
+	dest << this->getDIdDesc() << ", Data bytes: " << this->Data.size() << ": ";
 
 	if (this->Data.size() != 0)
 	{
@@ -450,11 +445,11 @@ TREG_Read1 &TREG_Read1::Go()
 	{
 	case 8:
 		this->resultCode = apci_read8(apci, 0, BAR_REGISTER, this->offset, (__u8*)&this->Value);
-		Trace("apci_read8(" + to_hex((__u8)this->offset) + ") → " + to_hex((__u8)this->Value));
+		Trace("apci_read8(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u8)this->Value));
 		break;
 	case 32:
 		this->resultCode = apci_read32(apci, 0, BAR_REGISTER, this->offset, &this->Value);
-		Trace("apci_read32(" + to_hex((__u8)this->offset) + ") → " + to_hex((__u32)this->Value));
+		Trace("apci_read32(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u32)this->Value));
 		break;
 	}
 	return *this;
@@ -464,7 +459,7 @@ TREG_Read1 &TREG_Read1::Go()
 
 std::shared_ptr<void> TREG_Read1::getResultValue()
 {
-	Trace("returning " + (this->width==8?to_hex((__u8)this->Value):to_hex((__u32)this->Value)));
+	Trace("returning " + (this->width==8?to_hex<__u8>((__u8)this->Value):to_hex<__u32>((__u32)this->Value)));
 	return this->width == 8
 					? (std::shared_ptr<void>) std::shared_ptr<__u8>(new __u8(this->Value))
 					: (std::shared_ptr<void>) std::shared_ptr<__u32>(new __u32(this->Value));
@@ -491,7 +486,7 @@ TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 
 TREG_Read1::TREG_Read1(DataItemIds DId, int ofs)
 {
-	Trace("ENTER. DId: "+to_hex((TDataId)DId)+", offset: "+to_hex((__u8)ofs));
+	Trace("ENTER. DId: "+to_hex<TDataId>(DId)+", offset: "+to_hex<__u8>(ofs));
 	this->setDId(REG_Read1);
 	this->setOffset(ofs);
 }
@@ -553,22 +548,19 @@ TBytes TREG_Read1::AsBytes(bool bAsReply)
 string TREG_Read1::AsString(bool bAsReply)
 {
 	stringstream dest;
-	dest << "DataItem = " << this->getDIdDesc() << " [";
-	if (this->width == 8)
-		dest << " " << this->width;
-	else
-		dest << this->width;
-	dest << " bit] from Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset);
+
+	dest << "REG_Read1(" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset) << ")";
 	if (bAsReply)
 	{
+		dest << " -> ";
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
 		if (this->width == 8){
-			dest << "; register read: " << hex << setw(2) << (v & 0x000000FF);
+			dest << hex << setw(2) << (v & 0x000000FF);
 		}
 		else
 		{
-			dest << "; register read: " << hex << setw(8) << v;
+			dest << hex << setw(8) << v;
 		}
 	}
 	Trace("Built: " + dest.str());
@@ -579,17 +571,18 @@ string TREG_Read1::AsString(bool bAsReply)
 #pragma region TREG_Writes implementation
 TREG_Writes::~TREG_Writes()
 {
+	Trace("Attempting to free the memory in this->Writes vector");
 	this->Writes.clear();
 }
 
 TREG_Writes &TREG_Writes::addWrite(__u8 w, int ofs, __u32 value)
 {
-	//Trace("ENTER, w:" + std::to_string(w) + ", offset: " + to_hex((__u8)ofs) + ", value: " + to_hex(value));
+	Trace("ENTER, w:" + std::to_string(w) + ", offset: " + to_hex<__u8>(ofs) + ", value: " + to_hex<__u32>(value));
 	REG_Write aWrite;
 	aWrite.width = w;
 	aWrite.offset = ofs;
 	aWrite.value = value;
-	this->Writes.push_back(aWrite);
+	this->Writes.emplace_back(aWrite);
 	return *this;
 }
 
@@ -600,11 +593,11 @@ TREG_Writes &TREG_Writes::Go()
 		{
 		case 8:
 			this->resultCode |= apci_write8(apci, 0, BAR_REGISTER, action.offset, (__u8)(action.value & 0x000000FF));
-			Trace("apci_write8(" + to_hex((__u8)action.offset) + ") → " + to_hex((__u8)(action.value & 0xFF)));
+			Trace("apci_write8(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u8>((action.value & 0xFF)));
 			break;
 		case 32:
 			this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
-			Trace("apci_write32(" + to_hex((__u8)action.offset) + ") → " + to_hex((__u32)action.value));
+			Trace("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
 			break;
 		}
 	return *this;
@@ -612,17 +605,10 @@ TREG_Writes &TREG_Writes::Go()
 string TREG_Writes::AsString(bool bAsReply)
 {
 	stringstream dest;
-	dest << "DataItem = " << this->getDIdDesc();
 	for (auto aWrite : this->Writes)
 	{
-		dest << " ["<<aWrite.width;
-		// if (aWrite.width == 8)
-		// 	dest << " " << aWrite.width;
-		// else
-		// 	dest << aWrite.width;
-		dest << " bit] write to Offset +0x" << hex << setw(2) << setfill('0') << static_cast<int>(aWrite.offset);
 		__u32 v = aWrite.value;
-		dest << " with value = " << hex << setw(aWrite.width / 8 * 2) << v;
+		dest << "REG_Write1(" << hex << setw(2) << setfill('0') << static_cast<int>(aWrite.offset) << ", " << hex << setw(aWrite.width / 8 * 2) << v << ");";
 	}
 	return dest.str();
 }
@@ -744,7 +730,7 @@ std::string TADC_StreamStart::AsString(bool bAsReply)
 	std::string msg = this->getDIdDesc();
 	if (bAsReply)
 	{
-		msg += "DataItem = ConnectionID = " + to_hex(this->argConnectionID);
+		msg += ", ConnectionID = " + to_hex<int>(this->argConnectionID);
 	}
 	return msg;
 };
@@ -782,7 +768,10 @@ TADC_StreamStop &TADC_StreamStop::Go()
 	return *this;
 };
 
-std::string TADC_StreamStop::AsString(bool bAsReply){return "TADC_StreamStop();";};
+std::string TADC_StreamStop::AsString(bool bAsReply)
+{
+	return this->getDIdDesc();
+}
 
 #pragma endregion "ADC"
 
@@ -1072,14 +1061,14 @@ string TMessage::AsString(bool bAsReply)
 	stringstream dest;
 	TBytes raw = this->AsBytes(bAsReply);
 	Trace("TMessage, Raw Bytes: ", raw);
-	dest << "Message = MId:" << this->getMId() << ", csum: " << hex << setfill('0') << setw(2) << uppercase << static_cast<int>(raw.back())<< ", DataItems: " << DataItems.size();
+	dest << "Message = MId:" << to_hex<__u8>(this->getMId()) << ", csum: " << to_hex<__u8>(raw.back())<< ", DataItems: " << DataItems.size();
 	if (DataItems.size() != 0)
 	{
 		for (int itemNumber = 0; itemNumber < DataItems.size(); itemNumber++)
 		{
 			PTDataItem item = this->DataItems[itemNumber];
 			dest << endl
-				 << "              " << item->AsString(bAsReply);
+				 << "           " << setw(2) << itemNumber+1 << ": " << item->AsString(bAsReply);
 		}
 	}
 	return dest.str();

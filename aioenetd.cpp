@@ -229,6 +229,7 @@ from discord code-review conversation with Daria; these do not belong in this so
 #define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
 #define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
 int apci = 0;
+bool done = false;
 bool bTERMINATE = false;
 
 int listenPort_Control = 18767; // TODO: FIX: move into config file
@@ -347,7 +348,7 @@ int main(int argc, char *argv[])
 	timeout.tv_sec = 0; timeout.tv_usec = 0; // non-blocking
 
 	Trace("Polling for connections ...");
-	while(true)
+	do
 	{
 		// clear the socket set
 		FD_ZERO(&ControlReadfds);
@@ -376,7 +377,7 @@ int main(int argc, char *argv[])
 				exit(EXIT_FAILURE);
 			}
 
-			Log("New Control connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
+			Log("\nNew Control connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
 			Trace("Adding to list of Control sockets as " + std::to_string(ControlClientList.size()));
 			ControlClientList.push_back(new_socket);
 
@@ -398,7 +399,7 @@ int main(int argc, char *argv[])
 				// handle xmit error
 			}else
 			{
-				Log("Sent 'Hello' to Control Client#:\n"+ HelloControl.AsString());
+				Trace("Sent 'Hello' to Control Client#:\n          "+ HelloControl.AsString());
 			}
 		}
 
@@ -417,7 +418,7 @@ int main(int argc, char *argv[])
 					{
 						Trace("terminating ADC Streaming");
 						AdcStreamTerminate = 1;
-						apci_cancel_irq(apci, 1);
+						apci_cancel_irq(apci, AdcStreamTerminate);
 						AdcStreamingConnection = -1;
 						//pthread_cancel(worker_thread);
 						//pthread_join(worker_thread, NULL);
@@ -449,7 +450,7 @@ int main(int argc, char *argv[])
 							continue;
 						}
 
-						Log("Received on Control connection:\n          " + aMessage.AsString());
+						Log("\nReceived on Control connection:\n          " + aMessage.AsString());
 
 						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
 						try
@@ -465,10 +466,10 @@ int main(int argc, char *argv[])
 							aMessage.setMId('X');
 							Error(e.what());
 						}
-
 						Log("Control Reply Message built: \n          " + aMessage.AsString(true));
-						TBytes rbuf = aMessage.AsBytes(true);
-						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0);
+
+						TBytes rbuf = aMessage.AsBytes(true); // valgrind
+						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0); // valgrind
 						if (bytesSent == -1)
 						{
 							Error("! TCP Send of Reply to Control failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
@@ -521,7 +522,7 @@ int main(int argc, char *argv[])
 				// handle xmit error
 			}else
 			{
-				Log("sent 'Hello' to ADC Client# " + std::to_string(new_socket) + ", the connection ID: " + std::to_string(new_socket) + " (ORed with 0x80000000)");
+				Trace("sent 'Hello' to ADC Client# " + std::to_string(new_socket) + ", the connection ID: " + std::to_string(new_socket) + " (ORed with 0x80000000)");
 			}
 		}
 
@@ -541,7 +542,7 @@ int main(int argc, char *argv[])
 						AdcStreamTerminate = 1;
 						AdcStreamingConnection = -1;
 						//pthread_cancel(worker_thread);
-						//pthread_join(worker_thread, NULL);
+						pthread_join(worker_thread, NULL);
 					}
 					close( adcClient );
 					auto index = find(AdcStreamClientList.begin(), AdcStreamClientList.end(), adcClient);
@@ -573,8 +574,14 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
-	}
-
+	} while (!done);
+	std::time_t end_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	Log("AIOeNET Daemon "  VersionString " CLOSING, it is now: " + std::string(std::ctime(&end_time)));
+	ControlClientList.clear();
+	AdcStreamClientList.clear();
+	buf.clear();
+	pthread_join(worker_thread, NULL);
+	close(apci);
 	return 0;
 }
 
@@ -582,8 +589,7 @@ int main(int argc, char *argv[])
 static void sig_handler(int sig)
 {
 	Error("signal " + std::to_string(sig) + " detected; exiting");
-	close(apci);
-	exit(0);
+	done = true;
 }
 //---------------------End signal -----------------------
 

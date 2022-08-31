@@ -190,11 +190,11 @@ int apci_read32(int fd, unsigned long device_index, int bar, int offset, __u32 *
 
 int apci_wait_for_irq(int fd, unsigned long device_index)
 {
-	return ioctl(fd, apci_wait_for_irq_ioctl, device_index);
+	return ioctl(fd, apci_wait_for_irq_ioctl, &device_index);
 }
 int apci_cancel_irq(int fd, unsigned long device_index)
 {
-	return ioctl(fd, apci_cancel_wait_ioctl, device_index);
+	return ioctl(fd, apci_cancel_wait_ioctl, &device_index);
 }
 
 int apci_dma_transfer_size(int fd, unsigned long device_index, __u8 num_slots, size_t slot_size)

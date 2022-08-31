@@ -81,6 +81,7 @@ void *log_main(void *arg)
 		ring_read_index %= RING_BUFFER_SLOTS;
 	};
 	AdcLoggerThreadID = -1;
+
 	Trace("Thread ended");
 	return 0;
 }
@@ -161,6 +162,9 @@ void *worker_main(void *arg)
 	Trace("Setting AdcStreamingConnection to idle");
 	// pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);
+	pthread_mutex_destroy(&mutex);
+	sem_destroy(&full);
+	sem_destroy(&empty);
 	Trace("ADC Log Thread exiting.");
 	return 0;
 }
