@@ -21,15 +21,15 @@
 #include <signal.h>
 #include <math.h>
 #include <thread>
-#include <mutex>
 #include <netdb.h>
 #include <fcntl.h>
+#include <mutex>
 
 //#include "safe_queue.h"
 #include "logging.h"
 #include "TMessage.h"
 #include "TError.h"
-#include "eNET-AIO.h"
+#include "eNET-AIO16-16F.h"
 #include "apcilib.h"
 #include "adc.h"
 
