@@ -14,8 +14,9 @@ Upcoming change to centralize the construction of serialized data items:
 #include <thread>
 using namespace std;
 
-#include "TMessage.h"
+#include "logging.h"
 #include "TError.h"
+#include "TMessage.h"
 
 #include "apcilib.h"
 #include "eNET-AIO.h"

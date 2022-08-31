@@ -2,13 +2,15 @@
 #include <random>
 #include <iostream>
 #include <string>
+
+#include "logging.h"
 #include "eNET-types.h"
 #include "TMessage.h"
 
 using namespace std;
 int apci;
 
-int logtest(const source_location &loc = source_location::current())
+int logtest()
 {
     Trace(std::string("Foo! Trace-level Message"));
     Error("Frack! ERROR!");

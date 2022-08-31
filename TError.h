@@ -1,15 +1,7 @@
 #pragma once
 /*
-	Provides the TError stuff.
-	Also has Log/Trace/Error functionality, but that should be moved out eventually.
+	Provides the TError stuff
 */
-
-#define LOG_DISABLE_TRACE
-// #define LOG_DISABLE_INFO
-#define LOG_DISABLE_DEBUG
-// #define LOG_DISABLE_ERROR
-
-
 
 #include <linux/types.h>
 
@@ -36,50 +28,11 @@
 #define ERR_NYI -13
 #define ERR_ADC_BUSY -14
 #define ERR_ADC_FATAL -15
-extern const char *err_msg[];
+
 // TError (__u32) is intended to be replaced buy a class someday
 typedef __u32 TError;
 
-// // --------------------- New, classy, TError, below ------------------
-// typedef __s32 TStatusCode;
-// typedef std::string TStatusDescription;
-
-// class TError {
-// 	public:
-// 		TStatusCode Code;
-// 		TStatusDescription Message;
-// 		TError(TStatusCode Code = ERR_SUCCESS, TStatusDescription description = ""){}
-// 		//TStatusCode operator=(TError anError) { return Code; }
-// 		// operator int() const { return Code; }
-// 		// operator std::string() const { return Message.c_str(); }
-// 		// friend std::ostream& operator<<(std::ostream& os, const TError& err);
-// };
-
-// // std::ostream& operator<<(std::ostream& os, const TError& err)
-// // {
-// //	 os << err.Code << ": " << err.Message;
-// //	 return os;
-// // }
-
-// class TErrorDetailed : public TError
-// {
-// 	public:
-// 		// per-Error type pointer to struct with fields providing details
-// 		std::unique_ptr<void> Details;
-// 		time_t Timestamp;
-// };
-
-// class TError_Parse : public TErrorDetailed
-// {
-// 	struct TError_Parse_Details
-// 	{
-// 		size_t NumBytesReceived;
-// 		TBytes ReceivedBytes;
-// 	};
-
-// 	public:
-// 		std::unique_ptr<struct TError_Parse_Details> Details;
-// };
+extern const char *err_msg[];
 
 // const TError ErrorList[] = {
 // 	{-1, "ERR: Message Too Short"},
@@ -91,37 +44,3 @@ typedef __u32 TError;
 // 	// ... etc
 // };
 
-
-/* Logging Stuff */
-
-#include <experimental/source_location>
-using namespace std::experimental;
-
-// logging levels can be disabled at compile time
-#ifdef LOG_DISABLE_TRACE
-#define Trace(...) {}
-#else
-int Trace(std::string message, const source_location &loc = source_location::current());
-int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-#endif
-
-#ifdef LOG_DISABLE_WARNING
-#define Warn(...) {}
-#endif
-
-#ifdef LOG_DISABLE_INFO
-#define Log(...){}
-#else
-int Log(  std::string message, const source_location &loc = source_location::current());
-int Log(  std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-#endif
-
-#ifdef LOG_DISABLE_DEBUG
-#define Debug(...){}
-#else
-int Debug(std::string message, const source_location &loc = source_location::current());
-int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
-#endif
-
-int Error(std::string message, const source_location &loc = source_location::current());
-int Error(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
