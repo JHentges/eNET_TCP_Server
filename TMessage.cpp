@@ -595,28 +595,15 @@ TREG_Writes::~TREG_Writes()
 	this->Writes.clear();
 }
 
-// int WaitUntilRegisterBit(__u8 offset, __u32 bitMask, bool bUntilSet)  // TODO: replace with WaitUntilBitsMatch(__u8 offset, __u32 bmMask, __u32 bmPattern);
-// {
-// 	__u32 value;
-// 	int attempt = 0;
-// 	bool bitIsSet = false;
-// 	do
-// 	{
-// 		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
-// 		if (status < 0) return -errno;
-// 		if (++attempt > 1000) return -ETIMEDOUT; // TODO: use RTC if benchmark proves it is not too slow
-// 		bitIsSet = (value & bitMask) != 0;
-// 	} while (bUntilSet != bitIsSet);
-// 	return 0;
-// }
+// TODO: write WaitUntilBitsMatch(__u8 offset, __u32 bmMask, __u32 bmPattern);
 
-int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) {
+int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) { // TODO: move into utility source file
 	__u32 value;
 	int attempt = 0;
 	do {
 		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
 		if (status < 0) return -errno;
-		if (++attempt > 1000) return -ETIMEDOUT; // TODO: use RTC if benchmark proves it is not too slow
+		if (++attempt > 1000) return -ETIMEDOUT; // TODO: swap "attempt" with "timeout" RTC if benchmark proves RTC is not too slow
 	} while ((value & bitMask));
 	return 0;
 }
