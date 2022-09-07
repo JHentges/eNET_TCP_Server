@@ -161,6 +161,7 @@ void *worker_main(void *arg)
 		Error(e.what());
 	}
 	Trace("Setting AdcStreamingConnection to idle");
+	apci_write8(apci, 1, BAR_REGISTER, 0x12, 0); // turn off ADC start modes
 	// pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);
 	pthread_mutex_destroy(&mutex);

@@ -460,6 +460,7 @@ int main(int argc, char *argv[])
 							for (auto anItem : aMessage.DataItems)
 							{
 								anItem->Go();
+								usleep(160);
 							}
 							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
 						}
@@ -489,7 +490,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-
+		// Log("about to select on ADC Stream Client List");
 
 		FD_ZERO(&AdcStreamReadfds);
 		FD_SET(AdcStreamSocket, &AdcStreamReadfds);
@@ -532,7 +533,7 @@ int main(int argc, char *argv[])
 		{
 			if (FD_ISSET( adcClient, &AdcStreamReadfds))
 			{
-				bytesRead = read( adcClient , buffer, 1024);  // Read the incoming message
+				bytesRead = read( adcClient, buffer, 1024);  // Read the incoming message
 
 				if (bytesRead == 0) {  // if zero bytes were read, close the socket
 					getpeername(adcClient, (struct sockaddr*)&TCP_AdcStreamAddress , (socklen_t*)&addrAdcStreamSize);
@@ -588,10 +589,17 @@ int main(int argc, char *argv[])
 }
 
 //------------------- Signal---------------------------
+#define max_BRK_attempts 5
 static void sig_handler(int sig)
 {
-	Error("signal " + std::to_string(sig) + " detected; exiting");
+	static int sig_count = 1;
+	Log("signal " + std::to_string(sig) + " detected " + std::to_string(sig_count++) + " time; exiting");
 	done = true;
+	if(sig_count > max_BRK_attempts)
+	{
+		Error("main runloop's `done` flag not managing to exit, Terminating!");
+		exit(1);
+	}
 }
 //---------------------End signal -----------------------
 
