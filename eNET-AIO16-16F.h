@@ -92,13 +92,17 @@ Frex: replace all the #defines with an abstract base class fields, then derive o
 //  #define bmIrqEvent              (1 << 3)
 
 #define ofsDac                  0x30
+#define ofsDacSpiBusy           0x30
+    #define bmDacSpiBusy        (1 << 31)
 #define ofsDacSleep             0x34
+
 #define ofsDioDirections        0x3C
     #define bmDioInput              (1) // bit 0 is DIO#0, 1 is DIO#1 etc
     #define bmDioOutput             (0)
-
 #define ofsDioOutputs           0x40
 #define ofsDioInputs            0x44
+#define ofsDioSpiBusy           0x40
+    #define bmDioSpiBusy        (1 << 31)
 
 #define ofsSubMuxSelect         0x9C    // used to override autodetect
     #define bmNoSubMux              0x03

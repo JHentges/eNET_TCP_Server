@@ -227,6 +227,25 @@ TDataItemLength TDataItem::getMaxLength(DataItemIds DId)
 	return DIdList[getDIdIndex(DId)].maxLen;
 }
 
+void TDataItem::pushDId(TBytes & buf)
+{
+	TDataId DId = this->Id;
+	for (int i = 0; i < sizeof(DId); i++)
+	{
+		buf.push_back(DId & 0x000000FF);
+		DId >>= 8;
+	}
+}
+
+void TDataItem::pushLen(TBytes & buf, TDataItemLength len)
+{
+	for (int i = 0; i < sizeof(len); i++)
+	{
+		buf.push_back(len & 0x000000FF);
+		len >>= 8;
+	}
+}
+
 int TDataItem::isValidDataItemID(DataItemIds DataItemID)
 {
 	int result = false;
@@ -576,6 +595,17 @@ TREG_Writes::~TREG_Writes()
 	this->Writes.clear();
 }
 
+int WaitUntilRegisterBitSet(__u8 offset, __u32 bitMask, bool bSet) {
+	__u32 value;
+	int attempt = 0;
+	do {
+		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
+		if (status < 0) return -errno;
+		if(++attempt > 1000) return -ETIMEDOUT; // TODO: use RTC if benchmark proves it is not too slow
+	} while ( ! ((value & bitMask != 0) == bSet));
+	return 0;
+}
+
 TREG_Writes &TREG_Writes::addWrite(__u8 w, int ofs, __u32 value)
 {
 	Trace("ENTER, w:" + std::to_string(w) + ", offset: " + to_hex<__u8>(ofs) + ", value: " + to_hex<__u32>(value));
@@ -597,7 +627,26 @@ TREG_Writes &TREG_Writes::Go()
 			Trace("apci_write8(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u8>((action.value & 0xFF)));
 			break;
 		case 32:
-			this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
+			// DAC (at offset +30) and DIO (at offsets +3C → +44) are SPI based and must not write while the respective SPI bus is busy
+			switch(action.offset){
+				case ofsDac: // DAC SPI busy handling
+					this->resultCode = WaitUntilRegisterBitSet(ofsDacSpiBusy, bmDacSpiBusy, false);
+					break;
+				case ofsDioDirections:
+				case ofsDioOutputs:
+				case ofsDioInputs: // DIO SPI busy handling
+					this->resultCode = WaitUntilRegisterBitSet(ofsDioSpiBusy, bmDioSpiBusy, false);
+					break;
+				default:break;
+				}
+			if (0 == this->resultCode)
+				this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
+			else // TODO: FIX: should change TREG_Writes' REG_Write struct to include a resultCode and this else to set both the individual action.resultCode and the TREG_Writes.resultCode
+			{
+				Error("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value) + " returned "+std::to_string(this->resultCode));
+				return *this;
+			}
+
 			Trace("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
 			break;
 		}

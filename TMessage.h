@@ -206,24 +206,10 @@ public:
 	static int getDIdIndex(DataItemIds DId);
 	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
 	virtual TBytes AsBytes(bool bAsReply=false);
-
-	void pushDId(TBytes & buf)
-	{
-		TDataId DId = this->Id;
-		for (int i = 0; i < sizeof(DId); i++)
-		{
-			buf.push_back(DId & 0x000000FF);
-			DId >>= 8;
-		}
-	}
-	static void pushLen(TBytes & buf, TDataItemLength len)
-	{
-		for (int i = 0; i < sizeof(len); i++)
-		{
-			buf.push_back(len & 0x000000FF);
-			len >>= 8;
-		}
-	}
+	// push DId into buf; utility for AsBytes()
+	void pushDId(TBytes &buf);
+	// push Length of Data into buf; utility for AsBytes();
+	static void pushLen(TBytes &buf, TDataItemLength len);
 	// 2) Serialization: methods for source to generate TDataItems, typically for "Response Messages"
 
 	// zero-"Data" data item constructor
