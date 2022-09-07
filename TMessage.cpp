@@ -595,14 +595,29 @@ TREG_Writes::~TREG_Writes()
 	this->Writes.clear();
 }
 
-int WaitUntilRegisterBitSet(__u8 offset, __u32 bitMask, bool bSet) {
+// int WaitUntilRegisterBit(__u8 offset, __u32 bitMask, bool bUntilSet)  // TODO: replace with WaitUntilBitsMatch(__u8 offset, __u32 bmMask, __u32 bmPattern);
+// {
+// 	__u32 value;
+// 	int attempt = 0;
+// 	bool bitIsSet = false;
+// 	do
+// 	{
+// 		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
+// 		if (status < 0) return -errno;
+// 		if (++attempt > 1000) return -ETIMEDOUT; // TODO: use RTC if benchmark proves it is not too slow
+// 		bitIsSet = (value & bitMask) != 0;
+// 	} while (bUntilSet != bitIsSet);
+// 	return 0;
+// }
+
+int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) {
 	__u32 value;
 	int attempt = 0;
 	do {
 		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
 		if (status < 0) return -errno;
-		if(++attempt > 1000) return -ETIMEDOUT; // TODO: use RTC if benchmark proves it is not too slow
-	} while ( ! ((value & bitMask != 0) == bSet));
+		if (++attempt > 1000) return -ETIMEDOUT; // TODO: use RTC if benchmark proves it is not too slow
+	} while ((value & bitMask));
 	return 0;
 }
 
@@ -630,12 +645,12 @@ TREG_Writes &TREG_Writes::Go()
 			// DAC (at offset +30) and DIO (at offsets +3C → +44) are SPI based and must not write while the respective SPI bus is busy
 			switch(action.offset){
 				case ofsDac: // DAC SPI busy handling
-					this->resultCode = WaitUntilRegisterBitSet(ofsDacSpiBusy, bmDacSpiBusy, false);
+					this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
 					break;
 				case ofsDioDirections:
 				case ofsDioOutputs:
 				case ofsDioInputs: // DIO SPI busy handling
-					this->resultCode = WaitUntilRegisterBitSet(ofsDioSpiBusy, bmDioSpiBusy, false);
+					this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
 					break;
 				default:break;
 				}
