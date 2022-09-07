@@ -460,7 +460,6 @@ int main(int argc, char *argv[])
 							for (auto anItem : aMessage.DataItems)
 							{
 								anItem->Go();
-								usleep(160); // FIX: implement DAC- and DIO- specific SPI-bus-busy-bit polling in REG_Write and REG_Read .Go() functions
 							}
 							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
 						}
