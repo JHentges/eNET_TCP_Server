@@ -460,6 +460,7 @@ int main(int argc, char *argv[])
 							for (auto anItem : aMessage.DataItems)
 							{
 								anItem->Go();
+								usleep(159);
 							}
 							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
 						}

@@ -603,7 +603,11 @@ int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) { // TODO: move into u
 	do {
 		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
 		if (status < 0) return -errno;
-		if (++attempt > 1000) return -ETIMEDOUT; // TODO: swap "attempt" with "timeout" RTC if benchmark proves RTC is not too slow
+		if (++attempt > 1000)
+		{
+			Error("Timeout waiting for SPI to be not busy, at offset: "+to_hex<__u8>(offset));
+			return -ETIMEDOUT; // TODO: swap "attempt" with "timeout" RTC if benchmark proves RTC is not too slow
+		}
 	} while ((value & bitMask));
 	return 0;
 }
@@ -630,7 +634,8 @@ TREG_Writes &TREG_Writes::Go()
 			break;
 		case 32:
 			// DAC (at offset +30) and DIO (at offsets +3C → +44) are SPI based and must not write while the respective SPI bus is busy
-			switch(action.offset){
+			switch(action.offset)
+			{
 				case ofsDac: // DAC SPI busy handling
 					this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
 					break;
@@ -640,7 +645,7 @@ TREG_Writes &TREG_Writes::Go()
 					this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
 					break;
 				default:break;
-				}
+			}
 			if (0 == this->resultCode)
 				this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
 			else // TODO: FIX: should change TREG_Writes' REG_Write struct to include a resultCode and this else to set both the individual action.resultCode and the TREG_Writes.resultCode
