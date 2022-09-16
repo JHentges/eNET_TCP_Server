@@ -185,38 +185,40 @@ from discord code-review conversation with Daria; these do not belong in this so
 
 
  */
-#include <chrono>
-#include <ctime>
-#include <string>
-#include <vector>
-#include <queue>
-#include <sstream>
-#include <iostream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <unistd.h>   //close
+#include <algorithm>
 #include <arpa/inet.h>	//close
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
-#include <semaphore.h>
-#include <pthread.h>
-#include <sys/mman.h>
-#include <signal.h>
-#include <math.h>
-#include <thread>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <ctime>
+#include <errno.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <iostream>
+#include <filesystem>
+#include <math.h>
 #include <mutex>
 #include <netdb.h>
-#include <fcntl.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <queue>
+#include <semaphore.h>
+#include <signal.h>
+#include <sstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdlib.h>
+#include <string>
 #include <strings.h>
-#include <algorithm>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
+#include <sys/types.h>
+#include <sys/types.h>
+#include <thread>
+#include <unistd.h>   //close
+#include <vector>
+
 
 #define LOGGING_DISABLE
 
@@ -228,8 +230,9 @@ from discord code-review conversation with Daria; these do not belong in this so
 
 #define VersionString "0.1"
 
-#define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
-#define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
+// #define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
+// #define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
+
 int apci = 0;
 bool done = false;
 bool bTERMINATE = false;
@@ -260,18 +263,18 @@ int main(int argc, char *argv[])
 	else
 		sscanf(argv[1], "%d", &listenPort_Control);
 	Trace(std::string("Control port: ") + std::to_string(listenPort_Control));
-
-	apci = open(DEVICEPATH, O_RDONLY); // TODO: FIX: open the ONLY file in /dev/apci/ instead of a #defined filename
-	if(apci < 0){
-
-		apci = open(DEVICEPATH_FALLBACK, O_RDONLY);
-		if(apci < 0)
+	std::string devicefile = "";
+	std::string devicepath = "/dev/apci";
+	for (const auto & devfile : std::filesystem::directory_iterator(devicepath))
+	{
+		apci = open(devfile.path().c_str(), O_RDONLY);
+		if (apci >= 0)
 		{
-			Error("Error cannot open Device file Please ensure the APCI driver module is loaded or use sudo or chmod the device file");
-			exit(-2);
+			devicefile = devfile.path().c_str();
+			break;
 		}
-		Trace("Used fallback device path: " DEVICEPATH_FALLBACK);
 	}
+	Log("Opening device @ " + devicefile);
 
 	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
 
@@ -460,7 +463,7 @@ int main(int argc, char *argv[])
 							for (auto anItem : aMessage.DataItems)
 							{
 								anItem->Go();
-								usleep(159);
+								//usleep(159);
 							}
 							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
 						}

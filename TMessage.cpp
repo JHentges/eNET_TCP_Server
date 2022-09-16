@@ -625,7 +625,8 @@ TREG_Writes &TREG_Writes::addWrite(__u8 w, int ofs, __u32 value)
 
 TREG_Writes &TREG_Writes::Go()
 {
-	for(auto action : this->Writes)
+	this->resultCode = 0;
+	for (auto action : this->Writes)
 		switch (action.width)
 		{
 		case 8:
@@ -637,24 +638,37 @@ TREG_Writes &TREG_Writes::Go()
 			switch(action.offset)
 			{
 				case ofsDac: // DAC SPI busy handling
+					//Log("calling wait for spi on DAC register");
 					this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
 					break;
 				case ofsDioDirections:
 				case ofsDioOutputs:
 				case ofsDioInputs: // DIO SPI busy handling
+					//Log("calling wait for spi on DIO register");
 					this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
 					break;
-				default:break;
-			}
-			if (0 == this->resultCode)
-				this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
-			else // TODO: FIX: should change TREG_Writes' REG_Write struct to include a resultCode and this else to set both the individual action.resultCode and the TREG_Writes.resultCode
-			{
-				Error("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value) + " returned "+std::to_string(this->resultCode));
-				return *this;
+				default:
+					break;
 			}
 
-			Trace("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
+			if (0 == this->resultCode)
+			{
+				this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
+				if (0 == this->resultCode)
+				{
+					Trace("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
+				}
+				else
+				{
+					Error("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value) + " returned "+std::to_string(this->resultCode));
+					return *this;
+				}
+			}
+			else // TODO: FIX: should change TREG_Writes' REG_Write struct to include a resultCode and this else to set both the individual action.resultCode and the TREG_Writes.resultCode
+			{
+				Error("WaitUntilRegisterBitIsLow() returned "+std::to_string(this->resultCode));
+				return *this;
+			}
 			break;
 		}
 	return *this;
