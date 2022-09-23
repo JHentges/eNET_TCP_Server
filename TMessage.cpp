@@ -12,6 +12,7 @@ Upcoming change to centralize the construction of serialized data items:
 #include <cstdlib>
 #include <stdexcept>
 #include <thread>
+#include <ctime>
 using namespace std;
 
 #include "logging.h"
@@ -596,19 +597,22 @@ TREG_Writes::~TREG_Writes()
 }
 
 // TODO: write WaitUntilBitsMatch(__u8 offset, __u32 bmMask, __u32 bmPattern);
-
-int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) { // TODO: move into utility source file
-	__u32 value;
+int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask)  // TODO: move into utility source file
+{
+	__u32 value = 0;
 	int attempt = 0;
 	do {
 		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
-		if (status < 0) return -errno;
-		if (++attempt > 1000)
+		Trace("SPI Busy Bit at " + std::string(to_hex<__u8>(offset)) + " is " +( (value & bitMask) ? "1" : "0"));
+		if (status < 0)
+			return -errno;
+		if (++attempt > 100)
 		{
 			Error("Timeout waiting for SPI to be not busy, at offset: "+to_hex<__u8>(offset));
 			return -ETIMEDOUT; // TODO: swap "attempt" with "timeout" RTC if benchmark proves RTC is not too slow
 		}
 	} while ((value & bitMask));
+
 	return 0;
 }
 
@@ -623,8 +627,21 @@ TREG_Writes &TREG_Writes::addWrite(__u8 w, int ofs, __u32 value)
 	return *this;
 }
 
+#define SPI_DELAY_DAC 160000 // 160 µsec in ns
+#define SPI_DELAY_DIO 160000 // 160 µsec in ns
+
+__s64 now() // in nanoseconds
+{
+	timespec Now;
+	clock_gettime(CLOCK_BOOTTIME, &Now);
+	return Now.tv_sec * 1E9 + Now.tv_nsec;
+}
+
 TREG_Writes &TREG_Writes::Go()
 {
+	static __s64 nextAllowedTimeDioSpi = now(), nextAllowedTimeDacSpi = now();
+	__s64 diffTime = 0.0;
+
 	this->resultCode = 0;
 	for (auto action : this->Writes)
 		switch (action.width)
@@ -638,14 +655,25 @@ TREG_Writes &TREG_Writes::Go()
 			switch(action.offset)
 			{
 				case ofsDac: // DAC SPI busy handling
+					do{
+						diffTime = nextAllowedTimeDacSpi - now();
+					} while (diffTime > 0);
 					//Log("calling wait for spi on DAC register");
-					this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
+					//this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
+					//Trace("DAC SPI Busy Wait returned " + to_string(this->resultCode));
+					//usleep(160);
 					break;
 				case ofsDioDirections:
 				case ofsDioOutputs:
 				case ofsDioInputs: // DIO SPI busy handling
+					do{
+						diffTime = nextAllowedTimeDioSpi - now();
+						printf("delta %lld\n", diffTime);
+					} while (diffTime > 0);
 					//Log("calling wait for spi on DIO register");
-					this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
+					//this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
+					//Trace("DIO SPI Busy Wait returned "+to_string(this->resultCode));
+					//usleep(160);
 					break;
 				default:
 					break;
@@ -654,6 +682,19 @@ TREG_Writes &TREG_Writes::Go()
 			if (0 == this->resultCode)
 			{
 				this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
+				switch(action.offset)
+			{
+				case ofsDac: // DAC SPI busy handling
+					nextAllowedTimeDacSpi = now() + SPI_DELAY_DAC;
+					break;
+				case ofsDioDirections:
+				case ofsDioOutputs:
+				case ofsDioInputs: // DIO SPI busy handling
+					nextAllowedTimeDioSpi = now() + SPI_DELAY_DIO;
+					break;
+				default:
+					break;
+			}
 				if (0 == this->resultCode)
 				{
 					Trace("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
