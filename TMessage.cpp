@@ -655,23 +655,23 @@ TREG_Writes &TREG_Writes::Go()
 			switch(action.offset)
 			{
 				case ofsDac: // DAC SPI busy handling
-					do{
-						diffTime = nextAllowedTimeDacSpi - now();
-					} while (diffTime > 0);
+					// do{
+					// 	diffTime = nextAllowedTimeDacSpi - now();
+					// } while (diffTime > 0);
 					//Log("calling wait for spi on DAC register");
-					//this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
+					this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
 					//Trace("DAC SPI Busy Wait returned " + to_string(this->resultCode));
 					//usleep(160);
 					break;
 				case ofsDioDirections:
 				case ofsDioOutputs:
 				case ofsDioInputs: // DIO SPI busy handling
-					do{
-						diffTime = nextAllowedTimeDioSpi - now();
-						printf("delta %lld\n", diffTime);
-					} while (diffTime > 0);
+					// do{
+					// 	diffTime = nextAllowedTimeDioSpi - now();
+					// 	printf("delta %lld\n", diffTime);
+					// } while (diffTime > 0);
 					//Log("calling wait for spi on DIO register");
-					//this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
+					this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
 					//Trace("DIO SPI Busy Wait returned "+to_string(this->resultCode));
 					//usleep(160);
 					break;
