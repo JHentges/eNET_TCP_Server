@@ -182,6 +182,8 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	PWM_OutputSome,
 
 	ADC_ = 0x1000,				   // Query Only. *1
+	ADC_Claim,
+	ADC_Release,
 	ADC_ConfigurationOfEverything, // i.e., MId "C" to do ADC_ConfigureEverything; MId "Q" to do ADC_QueryEverythingsConfiguration
 	ADC_Range1,
 	ADC_RangeAll,

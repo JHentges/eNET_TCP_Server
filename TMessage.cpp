@@ -115,6 +115,8 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(PWM_OutputSome),
 
 	DIdNYI(ADC_),
+	DIdNYI(ADC_Claim),
+	DIdNYI(ADC_Release),
 	DIdNYI(ADC_ConfigurationOfEverything),
 	DIdNYI(ADC_Range1),
 	DIdNYI(ADC_RangeAll),
