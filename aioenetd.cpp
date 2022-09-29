@@ -243,9 +243,10 @@ void SendControlHello(int Socket);
 void SendAdcHello(int Socket);
 bool NeedsService(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs, void (*func)(int));
 void Disconnect(int Client, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs);
-bool GotMessage(char * theBuffer, int bytesRead, TMessage & parsedMessage);
-bool RunMessage(TMessage &aMessage);
-void SendResponse(int Client, TMessage &aMessage);
+
+bool GotMessage(char * theBuffer, int bytesRead, TMessage& parsedMessage);
+bool RunMessage(TMessage& aMessage);
+void SendResponse(int Client, TMessage& aMessage);
 
 int main(int argc, char *argv[])
 {
@@ -296,8 +297,7 @@ int main(int argc, char *argv[])
 							TMessage aMessage;
 							if ( ! GotMessage(buffer, bytesRead, aMessage))
 								continue;
-
-							RunMessage(aMessage); // TODO: queue aMessage to "run thread"
+							RunMessage(aMessage);			 // TODO: queue aMessage to "run thread"
 							SendResponse(aClient, aMessage); // TODO: from "run thread" queue aMessage to "send thread"
 						}
 						catch(std::logic_error e)
@@ -503,7 +503,7 @@ void Disconnect(int aClient, int addrSize, std::vector<int> &ClientList, struct 
 	}
 }
 
-bool GotMessage(char theBuffer[], int bytesRead, TMessage & parsedMessage)
+bool GotMessage(char theBuffer[], int bytesRead, TMessage& parsedMessage)
 {
 	TError result;
 	TBytes buf(theBuffer, theBuffer+bytesRead);
@@ -513,18 +513,18 @@ bool GotMessage(char theBuffer[], int bytesRead, TMessage & parsedMessage)
 	// for (int i = 0; i < bytesRead; i++) buf.push_back(theBuffer[i]);
 	Debug("Received " + std::to_string(buf.size())+" bytes, from Control Client# " + std::to_string(aClient)+": ", buf);
 
-	TMessage aMessage = TMessage::FromBytes(buf, result);
+	parsedMessage = TMessage::FromBytes(buf, result);
 
 	if (result != ERR_SUCCESS)
 	{
 		Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
 		return false;
 	}
-	Log("\nReceived on Control connection:\n          " + aMessage.AsString());
+	Log("\nReceived on Control connection:\n          " + parsedMessage.AsString());
 	return true;
 }
 
-bool RunMessage(TMessage &aMessage)
+bool RunMessage(TMessage& aMessage)
 {
 	Trace("Executing Message DataItems[].Go(), " + std::to_string(aMessage.DataItems.size()) + " total DataItems");
 	try
@@ -544,7 +544,7 @@ bool RunMessage(TMessage &aMessage)
 	return true;
 }
 
-void SendResponse(int Client, TMessage & aMessage)
+void SendResponse(int Client, TMessage& aMessage)
 {
 	TBytes rbuf = aMessage.AsBytes(true);						// valgrind
 	int bytesSent = send(Client, rbuf.data(), rbuf.size(), 0); // valgrind
