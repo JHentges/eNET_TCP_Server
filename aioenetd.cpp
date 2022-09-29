@@ -228,7 +228,7 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "adc.h"
 #include "apcilib.h"
 
-#define VersionString "0.1"
+#define VersionString "0.2"
 
 // #define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
 // #define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sig_handler);
 
 	std::time_t start_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-	Log("AIOeNET Daemon "  VersionString " STARTING, it is now: " + std::string(std::ctime(&start_time)));
+	Log("AIOeNET Daemon " VersionString " STARTING, it is now: " + std::string(std::ctime(&start_time)));
 
 	if(argc <2){
 
