@@ -19,7 +19,10 @@ from discord code-review conversation with Daria; these do not belong in this so
 	individual socket's receive-thread.
 	Because I have multiple receive threads it isn't nearly as necessary to "be fast": the TCP Stack will queue bytes for me.
 	Because my error-checking location (the parser, the exploder, .FromBytes()) is in a socket-specific (ie client-specific)
-	thread it is harder for fuzzed bytes sent over TCP to affect other clients or the device as a whole.
+	thread it is harde\
+    {              \
+        ;          \
+    }
 	Because my worker and all receive threads share a thread-safe std::queue<> everything is serialized nicely.
 
 	By putting 66% of the error checking, syntax AND semantic (but not operational errors, eg hardware timeouts) into the
@@ -186,12 +189,11 @@ from discord code-review conversation with Daria; these do not belong in this so
 
  */
 #include <algorithm>
-#include <arpa/inet.h>	//close
+#include <arpa/inet.h>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
-#include <errno.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <iostream>
@@ -207,62 +209,187 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdlib.h>
 #include <string>
 #include <strings.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
-#include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
-#include <sys/types.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <thread>
-#include <unistd.h>   //close
+#include <unistd.h>
 #include <vector>
-
 
 #define LOGGING_DISABLE
 
-//#include "safe_queue.h"
 #include "logging.h"
 #include "TMessage.h"
 #include "adc.h"
 #include "apcilib.h"
 
-#define VersionString "0.2"
-
-// #define DEVICEPATH_FALLBACK "/dev/apci/pcie_adio16_16f_0"  //TODO: use the ONLY file in /dev/apci/ not this specific filename
-// #define DEVICEPATH "/dev/apci/enet_aio16_16f_0"
+#define VersionString "0.2.1"
 
 int apci = 0;
 bool done = false;
 bool bTERMINATE = false;
 
-int listenPort_Control = 18767; // TODO: FIX: move into config file
+int listenPort_Control = 18767; // 0x494f, ASCII for "IO"
 int listenPort_AdcStream = listenPort_Control + 1;
 
 static void sig_handler(int sig);
+void OpenDevFile();
+void Intro(int argc, char**argv);
+void Listen( int Port, struct sockaddr_in &addr, int &Socket, int &SocketSize);
+void SendControlHello(int Socket);
+void SendAdcHello(int Socket);
+bool NeedsService(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs, void (*func)(int));
+void Disconnect(int Client, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs);
+bool GotMessage(char * theBuffer, int bytesRead, TMessage & parsedMessage);
+bool RunMessage(TMessage &aMessage);
+void SendResponse(int Client, TMessage &aMessage);
 
 int main(int argc, char *argv[])
 {
-	std::vector<int> ControlClientList;
-	std::vector<int> AdcStreamClientList;
+	Intro(argc, argv);
 
-	TBytes buf;
+	OpenDevFile(); // sets apci
+
 	char buffer[1025]; // data buffer of 1K // TODO: FIX: there shouldn't be both a byte array and a vector; resolve
+	TBytes buf;
+	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
 
-	signal(SIGINT, sig_handler);
+	struct sockaddr_in TCP_ControlAddress;
+	int ControlSocket, addrControlSize;
 
+	Listen(listenPort_Control, TCP_ControlAddress, ControlSocket, addrControlSize);
+
+	struct sockaddr_in TCP_AdcStreamAddress;
+	int AdcStreamSocket, addrAdcStreamSize;
+
+	Listen(listenPort_AdcStream, TCP_AdcStreamAddress, AdcStreamSocket, addrAdcStreamSize);
+
+	Trace("Polling for connections ...");
+
+	std::vector<int> ControlClientList;
+	ControlClientList.clear();
+	fd_set ControlReadfds;
+	int ControlActivity;
+
+	std::vector<int> AdcStreamClientList;
+	AdcStreamClientList.clear();
+	fd_set AdcStreamReadfds;
+	int AdcStreamActivity, i, bytesRead, sd;
+
+	do
+	{
+		if (NeedsService(ControlSocket, addrControlSize, ControlClientList, TCP_ControlAddress, ControlReadfds, SendControlHello))
+			for (auto aClient : ControlClientList) // TODO: FIX: should be handled by each read-thread
+				if (FD_ISSET( aClient, &ControlReadfds))
+				{
+					bytesRead = read( aClient, buffer, 1024);
+
+					if (bytesRead == 0)
+						Disconnect(aClient, addrControlSize, ControlClientList, TCP_ControlAddress, ControlReadfds);
+					else
+					{
+						try
+						{
+							TMessage aMessage;
+							if ( ! GotMessage(buffer, bytesRead, aMessage))
+								continue;
+
+							RunMessage(aMessage); // TODO: queue aMessage to "run thread"
+							SendResponse(aClient, aMessage); // TODO: from "run thread" queue aMessage to "send thread"
+						}
+						catch(std::logic_error e)
+						{
+							Error(e.what());
+						}
+					}
+				}
+
+
+		if (NeedsService(AdcStreamSocket, addrAdcStreamSize, AdcStreamClientList, TCP_AdcStreamAddress, AdcStreamReadfds, SendAdcHello))
+			for (auto adcClient : AdcStreamClientList) // TODO: FIX: should be handled by each read-thread
+				if (FD_ISSET( adcClient, &AdcStreamReadfds))
+				{
+					bytesRead = read( adcClient, buffer, 1024);  // Read the incoming message
+					if (bytesRead == 0)
+						Disconnect(adcClient, addrAdcStreamSize, AdcStreamClientList, TCP_AdcStreamAddress, AdcStreamReadfds);
+					else
+					{
+						// Error: some bytes were read on the ADC Streaming Data output port, ignore them
+						// the ADC Streaming connection is not supposed to receive anything
+						// buf.clear();
+						// for (int i = 0; i < bytesRead; i++)
+						// 	buf.push_back(buffer[i]);
+						// Error("ADC Stream Connection got Message; ignoring.  Received " + std::to_string(buf.size())+" bytes from Client# " + std::to_string(adcClient)+": ", buf);
+						Error("ADC Stream Connection got Message; ignoring.  Received " + std::to_string(bytesRead)+" bytes from Client# " + std::to_string(adcClient));
+					}
+				}
+	} while (!done);
+
+	std::time_t end_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	Log("AIOeNET Daemon "  VersionString " CLOSING, it is now: " + std::string(std::ctime(&end_time)));
+	ControlClientList.clear();
+	AdcStreamClientList.clear();
+	buf.clear();
+	pthread_join(worker_thread, NULL);
+	close(apci);
+	return 0;
+}
+
+void Listen( int Port, struct sockaddr_in &addr, int &Socket, int &SocketSize)
+{
+	int opt = 1;
+	if( (Socket = socket(AF_INET, SOCK_STREAM , 0)) == 0)
+	{
+		perror("socket failed");
+		exit(EXIT_FAILURE);
+	}
+
+	if( setsockopt(Socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )
+	{
+		Error("setsockopt failed");
+		perror("setsockopt failed");
+		exit(EXIT_FAILURE);
+	}
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = htons( Port );
+	if (bind(Socket, (struct sockaddr *)&addr, sizeof(addr))<0)
+	{
+		Error("Bind on port "+ std::to_string(Port)+" failed");
+		perror("Bind on port failed");
+		exit(EXIT_FAILURE);
+	}
+
+	if (listen(Socket, 32) < 0) // 32 connections; soft-cap or hard-cap?
+	{
+		Error("listen(ControlSocket) failed");
+		perror("listen(ControlSocket) failed");
+		exit(EXIT_FAILURE);
+	}
+	SocketSize = sizeof(addr);
+}
+
+void Intro(int argc, char**argv)
+{
 	std::time_t start_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	Log("AIOeNET Daemon " VersionString " STARTING, it is now: " + std::string(std::ctime(&start_time)));
 
-	if(argc <2){
-
-		Log("Warning: no tcp port specified.  Using default: "+std::to_string(listenPort_Control));
+	signal(SIGINT, sig_handler);
+	if(argc < 2){
+		Trace("Warning: no tcp port specified.  Using default: "+std::to_string(listenPort_Control));
 		Trace(std::string("Usage: " + std::string(argv[0]) + " {port_to_listen — (i.e., 18767)}"));
 	}
 	else
 		sscanf(argv[1], "%d", &listenPort_Control);
+
 	Trace(std::string("Control port: ") + std::to_string(listenPort_Control));
+}
+
+void OpenDevFile()
+{
 	std::string devicefile = "";
 	std::string devicepath = "/dev/apci";
 	for (const auto & devfile : std::filesystem::directory_iterator(devicepath))
@@ -275,324 +402,164 @@ int main(int argc, char *argv[])
 		}
 	}
 	Log("Opening device @ " + devicefile);
+}
 
-	buf.reserve((maxPayloadLength + minimumMessageLength)); // FIX: I think this should be per-receive-thread?
-
-	__u64 cyclecount = 0;
-	int opt = 1;
-	int new_socket, i, bytesRead, sd;
-
-	ControlClientList.clear();
-	AdcStreamClientList.clear();
-
-	// configure Control listener
-		int ControlSocket, addrControlSize, ControlActivity;
-		struct sockaddr_in TCP_ControlAddress;
-		fd_set ControlReadfds;
-		if( (ControlSocket = socket(AF_INET , SOCK_STREAM , 0)) == 0)
-		{
-			perror("socket failed");
-			exit(EXIT_FAILURE);
-		}
-		if( setsockopt(ControlSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )
-		{
-			Error("setsockopt on ControlSocket failed");
-			perror("setsockopt on ControlSocket failed");
-			exit(EXIT_FAILURE);
-		}
-		TCP_ControlAddress.sin_family = AF_INET;
-		TCP_ControlAddress.sin_addr.s_addr = INADDR_ANY;
-		TCP_ControlAddress.sin_port = htons( listenPort_Control );
-		if (bind(ControlSocket, (struct sockaddr *)&TCP_ControlAddress, sizeof(TCP_ControlAddress))<0)
-		{
-			Error("Bind on ControlSocket port failed");
-			perror("Bind on ControlSocket port failed");
-			exit(EXIT_FAILURE);
-		}
-		if (listen(ControlSocket, 32) < 0)
-		{
-			Error("listen(ControlSocket) failed");
-			perror("listen(ControlSocket) failed");
-			exit(EXIT_FAILURE);
-		}
-		addrControlSize = sizeof(TCP_ControlAddress);
-
-	// configure ADC Streaming Data listener
-		int AdcStreamSocket, addrAdcStreamSize, AdcStreamActivity;
-		struct sockaddr_in TCP_AdcStreamAddress;
-		fd_set AdcStreamReadfds;
-		if( (AdcStreamSocket = socket(AF_INET , SOCK_STREAM , 0)) == 0)
-		{
-			perror("AdcStreamSocket socket creation failed");
-			exit(EXIT_FAILURE);
-		}
-		if( setsockopt(AdcStreamSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )
-		{
-			Error("setsockopt on ControlSocket failed");
-			perror("setsockopt on ControlSocket failed");
-			exit(EXIT_FAILURE);
-		}
-		TCP_AdcStreamAddress.sin_family = AF_INET;
-		TCP_AdcStreamAddress.sin_addr.s_addr = INADDR_ANY;
-		TCP_AdcStreamAddress.sin_port = htons( listenPort_AdcStream );
-		if (bind(AdcStreamSocket, (struct sockaddr *)&TCP_AdcStreamAddress, sizeof(TCP_AdcStreamAddress))<0)
-		{
-			Error("Bind on ADC Streaming data port failed");
-			perror("Bind on ADC Streaming data port failed");
-			exit(EXIT_FAILURE);
-		}
-		if (listen(AdcStreamSocket, 1) < 0)
-		{
-			Error("listen(AdcStreamSocket) failed");
-			perror("listen(AdcStreamSocket) failed");
-			exit(EXIT_FAILURE);
-		}
-		addrAdcStreamSize = sizeof(TCP_AdcStreamAddress);
-
+bool hasActivity(int &Socket, fd_set &ReadFDs, std::vector<int> &ClientList)
+{
+	int Activity;
 	struct timeval timeout;
 	timeout.tv_sec = 0; timeout.tv_usec = 0; // non-blocking
+	FD_ZERO(&ReadFDs);
+	FD_SET(Socket, &ReadFDs);
 
-	Trace("Polling for connections ...");
-	do
+	for ( auto aClient : ClientList)
 	{
-		// clear the socket set
-		FD_ZERO(&ControlReadfds);
-		FD_SET(ControlSocket, &ControlReadfds);
-		// FIX: this should be in each read-thread ?
-		for ( auto aClient : ControlClientList)
+		FD_SET( aClient , &ReadFDs);
+	}
+	Activity = select( 1023, &ReadFDs, NULL, NULL, &timeout);
+	if ((Activity < 0) && (errno != EINTR))
+	{
+		Error("select error");
+		return false;
+	}
+	else
+		return true;
+
+}
+
+bool NeedsService(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs, void (*SendHello)(int))
+{
+	int new_socket;
+	if (hasActivity(Socket, ReadFDs, ClientList))
+		if (FD_ISSET(Socket, &ReadFDs)) // TODO: FIX: this condition should spawn a new read-thread
 		{
-			FD_SET( aClient , &ControlReadfds);
-		}
-		// WARN: BLOCK until ControlActivity occurs on any listen port by changing timeout to NULL
-		// TODO: FIX: shouldn't block; main run-loop should act as a watchdog and do logging or whatnot
-		// WAS: ControlActivity = select( max_sd + 1 , &ControlReadfds , NULL , NULL , NULL); but I've removed mx_sd
-		//      while refactoring int client_socket[30]; int max_clients = 30; into vector<int> ControlClientList
-		ControlActivity = select( 1023, &ControlReadfds, NULL, NULL, &timeout);
-		if ((ControlActivity < 0) && (errno != EINTR))
-		{
-			Error("select error on Control");
-		}
-		// If something happened on the master socket then it is a new incoming connection
-		if (FD_ISSET(ControlSocket, &ControlReadfds)) // TODO: FIX: this condition should spawn a new read-thread
-		{
-			if ((new_socket = accept(ControlSocket, (struct sockaddr *)&TCP_ControlAddress, (socklen_t*)&addrControlSize))<0)
+			if ((new_socket = accept(Socket, (struct sockaddr *)&addr, (socklen_t*)&addrSize)) < 0)
 			{
-				Error("accept failed on Control");
-				perror("accept failed on Control");
+				Error("accept failed");
+				perror("accept failed");
 				exit(EXIT_FAILURE);
 			}
 
-			Log("\nNew Control connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
-			Trace("Adding to list of Control sockets as " + std::to_string(ControlClientList.size()));
-			ControlClientList.push_back(new_socket);
+			Log("\nNew Control connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(addr.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(addr.sin_port)));
+			Trace("Adding to list of Control sockets as " + std::to_string(ClientList.size()));
+			ClientList.push_back(new_socket);
 
-			// send "Hello" message on Control connection
-			TMessageId MId_Hello = 'H';
-			TPayload Payload;
-			TBytes data{};
-			for (int byt=0;byt<sizeof(new_socket); byt++)
-				data.push_back((new_socket >> (8*byt)) & 0x000000FF);
-			PTDataItem d2 = std::unique_ptr<TDataItem>(new TDataItem(TCP_ConnectionID, data));
-			Payload.push_back(d2);
-			TMessage HelloControl = TMessage(MId_Hello, Payload);
-
-			TBytes rbuf = HelloControl.AsBytes(false);
-			int bytesSent = send(new_socket, rbuf.data(), rbuf.size(), 0);
-			if (bytesSent == -1)
-			{
-				Error("! TCP Send of Control Hello appears to have failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
-				// handle xmit error
-			}else
-			{
-				Trace("Sent 'Hello' to Control Client#:\n          "+ HelloControl.AsString());
-			}
+			SendHello(new_socket);
 		}
+		else
+			return true;
+	return false; // either no activity or was new connection, so nothing further needs to be done
+}
 
-		// else it's some IO operation on some other socket
-		for (auto aClient : ControlClientList) // TODO: FIX: should be handled by each read-thread
-		{
-			if (FD_ISSET( aClient, &ControlReadfds))
-			{
-				bytesRead = read( aClient , buffer, 1024);// Read the incoming message
+void SendAdcHello(int Socket)
+{
+	__u32 HelloAdc = (__u32)(Socket | 0x80000000); // "invalid ADC bit, and connection ID"
+	int bytesSent = send(Socket, &HelloAdc, 4, 0);
+	if (bytesSent == -1)
+	{
+		Error("! TCP Send of ADC Hello appears to have failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(sizeof(HelloAdc)) + ")");
+		// handle xmit error
+	}else
+	{
+		Trace("sent 'Hello' to ADC Client# " + std::to_string(new_socket) + ", the connection ID: " + std::to_string(Socket) + " (ORed with 0x80000000)");
+	}
+}
 
-				if (bytesRead == 0) { // if zero bytes were read, close the socket
-					// Somebody disconnected, get his details and print
-					getpeername(aClient , (struct sockaddr*)&TCP_ControlAddress , (socklen_t*)&addrControlSize);
-					Log(std::string("Host disconnected Control connection, ip: ") + inet_ntoa(TCP_ControlAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_ControlAddress.sin_port)));
-					if (AdcStreamingConnection = aClient)
-					{
-						Trace("terminating ADC Streaming");
-						AdcStreamTerminate = 1;
-						apci_cancel_irq(apci, AdcStreamTerminate);
-						AdcStreamingConnection = -1;
-						//pthread_cancel(worker_thread);
-						//pthread_join(worker_thread, NULL);
-					}
-					close( aClient );
-					auto index = find(ControlClientList.begin(), ControlClientList.end(), aClient);
-					if (index != ControlClientList.end())
-						ControlClientList.erase(index);
-					else{
-						Error("INTERNAL ERROR: for-each connection didn't find connection in itself?!?");
-						// handle bad error: the for-each determined aClient can't be found???
-					}
-				}
-				else // some bytes were read
-				{
-					try
-					{
-						TError result;
-						buf.clear();
-						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
-						for (int i = 0; i < bytesRead; i++)
-							buf.push_back(buffer[i]);
-						Debug("Received " + std::to_string(buf.size())+" bytes, from Control Client# " + std::to_string(aClient)+": ", buf);
+void SendControlHello(int Socket)
+{
+	TMessageId MId_Hello = 'H';
+	TPayload Payload;
+	TBytes data{};
+	for (int byt = 0; byt < sizeof(Socket); byt++)
+		data.push_back((Socket >> (8 * byt)) & 0x000000FF);
+	PTDataItem d2 = std::unique_ptr<TDataItem>(new TDataItem(TCP_ConnectionID, data));
+	Payload.push_back(d2);
+	TMessage HelloControl = TMessage(MId_Hello, Payload);
 
-						auto aMessage = TMessage::FromBytes(buf, result);
-						if (result != ERR_SUCCESS)
-						{
-							Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
-							continue;
-						}
+	TBytes rbuf = HelloControl.AsBytes(false);
+	int bytesSent = send(Socket, rbuf.data(), rbuf.size(), 0);
+	if (bytesSent == -1)
+	{
+		Error("! TCP Send of Control Hello appears to have failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
+		// handle xmit error
+	}
+	else
+	{
+		Trace("Sent 'Hello' to Control Client#:\n          " + HelloControl.AsString());
+	}
+}
 
-						Log("\nReceived on Control connection:\n          " + aMessage.AsString());
+void Disconnect(int aClient, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs)
+{
+	getpeername(aClient, (struct sockaddr*)&addr , (socklen_t*)&addrSize);
+	Log(std::string("Host disconnected Control connection, ip: ") + inet_ntoa(addr.sin_addr) + ", listen_port " + std::to_string(ntohs(addr.sin_port)));
+	close( aClient );
+	auto index = find(ClientList.begin(), ClientList.end(), aClient);
+	if (index != ClientList.end())
+		ClientList.erase(index);
+	else{
+		Error("INTERNAL ERROR: for-each connection didn't find connection in itself?!?");
+		// handle bad error: the for-each determined aClient can't be found???
+	}
+}
 
-						Trace("Executing Message DataItems[].Go(), "+ std::to_string(aMessage.DataItems.size()) + " total DataItems");
-						try
-						{
-							for (auto anItem : aMessage.DataItems)
-							{
-								anItem->Go();
-								//usleep(159);
-							}
-							aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
-						}
-						catch(std::logic_error e)
-						{
-							aMessage.setMId('X');
-							Error(e.what());
-						}
-						Log("Control Reply Message built: \n          " + aMessage.AsString(true));
+bool GotMessage(char theBuffer[], int bytesRead, TMessage & parsedMessage)
+{
+	TError result;
+	TBytes buf(theBuffer, theBuffer+bytesRead);
+	// Log("buf has ", buf);
+	// buf.clear();
+	// // TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
+	// for (int i = 0; i < bytesRead; i++) buf.push_back(theBuffer[i]);
+	Debug("Received " + std::to_string(buf.size())+" bytes, from Control Client# " + std::to_string(aClient)+": ", buf);
 
-						TBytes rbuf = aMessage.AsBytes(true); // valgrind
-						int bytesSent = send(aClient, rbuf.data(), rbuf.size(), 0); // valgrind
-						if (bytesSent == -1)
-						{
-							Error("! TCP Send of Reply to Control failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
-							// handle xmit error
-						}else
-						{
-							Trace("sent Reply to Control Client# "+std::to_string(aClient)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
-						}
-					}
-					catch(std::logic_error e)
-					{
-						Error(e.what());
-					}
-				}
-			}
-		}
+	TMessage aMessage = TMessage::FromBytes(buf, result);
 
-		// Log("about to select on ADC Stream Client List");
+	if (result != ERR_SUCCESS)
+	{
+		Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
+		return false;
+	}
+	Log("\nReceived on Control connection:\n          " + aMessage.AsString());
+	return true;
+}
 
-		FD_ZERO(&AdcStreamReadfds);
-		FD_SET(AdcStreamSocket, &AdcStreamReadfds);
-		for ( auto adcStreamClient : AdcStreamClientList)
-		{
-			FD_SET(adcStreamClient, &AdcStreamReadfds);
-		}
-		AdcStreamActivity = select( 1023, &AdcStreamReadfds, NULL, NULL, &timeout);
-		if ((AdcStreamActivity < 0) && (errno != EINTR))
-		{
-			Error("select error on ADC Streaming");
-		}
-		if (FD_ISSET(AdcStreamSocket, &AdcStreamReadfds)) // TODO: FIX: this condition should spawn a new read-thread
-		{
-			if ((new_socket = accept(AdcStreamSocket, (struct sockaddr *)&TCP_AdcStreamAddress, (socklen_t*)&addrAdcStreamSize))<0)
-			{
-				Error("accept failed on ADC Stream");
-				perror("accept failed on ADC Stream");
-				exit(EXIT_FAILURE);
-			}
+bool RunMessage(TMessage &aMessage)
+{
+	Trace("Executing Message DataItems[].Go(), " + std::to_string(aMessage.DataItems.size()) + " total DataItems");
+	try
+	{
+		for (auto anItem : aMessage.DataItems)
+			anItem->Go();
+		aMessage.setMId('R'); // FIX: should be performed based on anItem.getResultCode() indicating no errors
+	}
+	catch(std::logic_error e)
+	{
+		aMessage.setMId('X');
+		Error(e.what());
+		Log("Control Error Message built: \n          " + aMessage.AsString(true));
+		return false;
+	}
+	Log("Control Reply Message built: \n          " + aMessage.AsString(true));
+	return true;
+}
 
-			Trace("New ADC Stream connection, socket fd is: " + std::to_string(new_socket) + ", ip is: " + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listenPort_Control is: " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
-			Trace("Adding to list of ADC Stream sockets as " + std::to_string(AdcStreamClientList.size()));
-			AdcStreamClientList.push_back(new_socket);
-
-			// send "Hello" message on ADC connection
-			__u32 HelloAdc = (__u32)(new_socket | 0x80000000); // "invalid ADC bit, and connection ID"
-			int bytesSent = send(new_socket, &HelloAdc, 4, 0);
-			if (bytesSent == -1)
-			{
-				Error("! TCP Send of ADC Hello appears to have failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(sizeof(HelloAdc)) + ")");
-				// handle xmit error
-			}else
-			{
-				Trace("sent 'Hello' to ADC Client# " + std::to_string(new_socket) + ", the connection ID: " + std::to_string(new_socket) + " (ORed with 0x80000000)");
-			}
-		}
-
-		for (auto adcClient : AdcStreamClientList) // TODO: FIX: should be handled by each read-thread
-		{
-			if (FD_ISSET( adcClient, &AdcStreamReadfds))
-			{
-				bytesRead = read( adcClient, buffer, 1024);  // Read the incoming message
-
-				if (bytesRead == 0) {  // if zero bytes were read, close the socket
-					getpeername(adcClient, (struct sockaddr*)&TCP_AdcStreamAddress , (socklen_t*)&addrAdcStreamSize);
-					Log(std::string("Host disconnected ADC connection, ip: ") + inet_ntoa(TCP_AdcStreamAddress.sin_addr) + ", listen_port " + std::to_string(ntohs(TCP_AdcStreamAddress.sin_port)));
-					if (AdcStreamingConnection = adcClient)
-					{
-						Trace("terminating ADC Streaming");
-						apci_cancel_irq(apci, 1);
-						AdcStreamTerminate = 1;
-						AdcStreamingConnection = -1;
-						//pthread_cancel(worker_thread);
-						pthread_join(worker_thread, NULL);
-					}
-					close( adcClient );
-					auto index = find(AdcStreamClientList.begin(), AdcStreamClientList.end(), adcClient);
-					if (index != AdcStreamClientList.end())
-						AdcStreamClientList.erase(index);
-					else{
-						Error("INTERNAL ERROR: couldn't find closing connection in connection list?!?");
-						// handle bad error: the for-each determined adcClient can't be found?!?!?
-					}
-				}
-				else
-				// Error: some bytes were read on the ADC Streaming Data output port, ignore them
-				// the ADC Streaming connection is not supposed to receive anything
-				{
-					try
-					{
-						TError result;
-						buf.clear();
-						// TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
-						for (int i = 0; i < bytesRead; i++)
-							buf.push_back(buffer[i]);
-						Error("ADC Stream Connection Received " + std::to_string(buf.size())+" bytes from Client# " + std::to_string(adcClient)+": ", buf);
-						Error("Ignoring Message");
-					}
-					catch(std::logic_error e)
-					{
-						Error(e.what());
-					}
-				}
-			}
-		}
-	} while (!done);
-	std::time_t end_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-	Log("AIOeNET Daemon "  VersionString " CLOSING, it is now: " + std::string(std::ctime(&end_time)));
-	ControlClientList.clear();
-	AdcStreamClientList.clear();
-	buf.clear();
-	pthread_join(worker_thread, NULL);
-	close(apci);
-	return 0;
+void SendResponse(int Client, TMessage & aMessage)
+{
+	TBytes rbuf = aMessage.AsBytes(true);						// valgrind
+	int bytesSent = send(Client, rbuf.data(), rbuf.size(), 0); // valgrind
+	if (bytesSent == -1)
+	{
+		Error("! TCP Send of Reply to Control failed, bytesSent != Message Length (" + std::to_string(bytesSent) + " != " + std::to_string(rbuf.size()) + ")");
+		// handle xmit error
+	}else
+	{
+		Trace("sent Reply to Control Client# "+std::to_string(Client)+" " + std::to_string(bytesSent) + " bytes: ", rbuf);
+	}
 }
 
 //------------------- Signal---------------------------
-#define max_BRK_attempts 5
+#define max_BRK_attempts 3
 static void sig_handler(int sig)
 {
 	static int sig_count = 1;

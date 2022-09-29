@@ -30,14 +30,14 @@ int Trace(std::string intro, TBytes bytes, bool crlf = true, const source_locati
 #endif
 
 #ifdef LOG_DISABLE_INFO
-#define Log(...){}
+#define Log(...) {}
 #else
 int Log(  std::string message, const source_location &loc = source_location::current());
 int Log(  std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
 #endif
 
 #ifdef LOG_DISABLE_DEBUG
-#define Debug(...){}
+#define Debug(...) {}
 #else
 int Debug(std::string message, const source_location &loc = source_location::current());
 int Debug(std::string intro, TBytes bytes, bool crlf = true, const source_location &loc = source_location::current());
