@@ -251,9 +251,9 @@ int main(int argc, char *argv[])
 		if (NeedsService(ControlSock, ControlAddrSize, ControlClients, ControlAddr, ControlFDs, SendControlHello))
 			for (auto ControlClient : ControlClients) // TODO: FIX: should be handled by each read-thread
 				if (FD_ISSET( ControlClient, &ControlFDs))
-					if ((bytesRead = read( ControlClient, buffer, 1024)) == 0)
+					if ((bytesRead = read( ControlClient, buffer, 1024)) == 0){
 						Disconnect(ControlClient, ControlAddrSize, ControlClients, ControlAddr, ControlFDs);
-					else
+					}else
 					{
 						// try {
 							TMessage aMessage;
@@ -268,7 +268,13 @@ int main(int argc, char *argv[])
 			for (auto adcClient : AdcClients) // TODO: FIX: should be handled by each read-thread
 				if (FD_ISSET( adcClient, &AdcFDs))
 					if ((bytesRead = read( adcClient, buffer, 1024)) == 0)
+					{
 						Disconnect(adcClient, AdcAddrSize, AdcClients, AdcAddr, AdcFDs);
+						AdcStreamTerminate = 1;
+						apci_cancel_irq(apci, 1);
+						AdcStreamingConnection = -1;
+						AdcWorkerThreadID = -1;
+					}
 					else
 					{
 						// buf.clear();
@@ -413,7 +419,7 @@ void SendAdcHello(int Socket)
 		// handle xmit error
 	}else
 	{
-		Trace("sent 'Hello' to ADC Client# " + std::to_string(new_socket) + ", the connection ID: " + std::to_string(Socket) + " (ORed with 0x80000000)");
+		Trace("sent 'Hello' to ADC Client# " + std::to_string(Socket) + ", the connection ID: " + std::to_string(Socket) + " (ORed with 0x80000000)");
 	}
 }
 
@@ -426,6 +432,17 @@ void SendControlHello(int Socket)
 		data.push_back((Socket >> (8 * byt)) & 0x000000FF);
 	PTDataItem d2 = std::unique_ptr<TDataItem>(new TDataItem(TCP_ConnectionID, data));
 	Payload.push_back(d2);
+
+	__u32 dacRangeDefault = 0x3031E142;
+	for (int channel = 0; channel < 4; channel++)
+	{
+		data.clear();
+		data.push_back(channel);
+		for (int byt = 0; byt < sizeof(dacRangeDefault); byt++)
+			data.push_back((dacRangeDefault >> (8 * byt)) & 0x000000FF);
+		d2 = std::unique_ptr<TDataItem>(new TDataItem(DAC_Range1, data));
+		Payload.push_back(d2);
+	}
 	TMessage HelloControl = TMessage(MId_Hello, Payload);
 
 	TBytes rbuf = HelloControl.AsBytes(false);
@@ -437,7 +454,7 @@ void SendControlHello(int Socket)
 	}
 	else
 	{
-		Trace("Sent 'Hello' to Control Client#:\n          " + HelloControl.AsString());
+		Log("Sent 'Hello' to Control Client#:\n          " + HelloControl.AsString());
 	}
 }
 
@@ -463,7 +480,7 @@ bool GotMessage(char theBuffer[], int bytesRead, TMessage& parsedMessage)
 	// buf.clear();
 	// // TODO: DOES NOT WORK? // buf.assign(buffer, buffer + bytesRead); // turn buffer into TBytes
 	// for (int i = 0; i < bytesRead; i++) buf.push_back(theBuffer[i]);
-	Debug("Received " + std::to_string(buf.size())+" bytes, from Control Client# " + std::to_string(aClient)+": ", buf);
+	Debug("Received " + std::to_string(buf.size())+" bytes, from Control Client: ", buf);
 
 	parsedMessage = TMessage::FromBytes(buf, result);
 
@@ -489,7 +506,7 @@ bool RunMessage(TMessage& aMessage)
 	{
 		aMessage.setMId('X');
 		Error(e.what());
-		Log("Control Error Message built: \n          " + aMessage.AsString(true));
+		Log("Error Message built: \n          " + aMessage.AsString(true));
 		return false;
 	}
 	Log("Control Reply Message built: \n          " + aMessage.AsString(true));
