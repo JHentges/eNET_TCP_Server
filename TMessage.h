@@ -337,11 +337,17 @@ public:
 };
 #pragma endregion
 
-#pragma region "DAC Output"
+#pragma region "DAC Stuff"
 class TDIdDacOutput : public TDataItem
 {
 public:
 	TDIdDacOutput(TBytes buf) : TDataItem::TDataItem{buf}{};
+};
+
+class TDIdDacRange1 : public TDataItem
+{
+public:
+		TDIdDacRange1(TBytes buf) : TDataItem::TDataItem{buf} {};
 };
 #pragma endregion
 

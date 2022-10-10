@@ -134,6 +134,7 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	DAC_Output1,
 	DAC_OutputAll,
 	DAC_OutputSome,
+	DAC_Range1 = 0x204, // Query Only.
 	DAC_Configure1,
 	DAC_ConfigureAll,
 	DAC_ConfigureSome,

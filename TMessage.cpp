@@ -67,6 +67,7 @@ TDIdListEntry const DIdList[] = {
 	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(u8 iDAC, single Volts)"},
 	DIdNYI(DAC_OutputAll),
 	DIdNYI(DAC_OutputSome),
+	{DAC_Range1, 5, 5, 5, construct<TDIdDacRange1>, "DAC_Range1(u8 iDAC, u32 RangeCode)"},
 	DIdNYI(DAC_Configure1),
 	DIdNYI(DAC_ConfigureAll),
 	DIdNYI(DAC_ConfigureSome),
