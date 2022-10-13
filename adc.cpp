@@ -73,7 +73,17 @@ void *log_main(void *arg)
 		}
 		pthread_mutex_lock(&mutex);
 
-		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), 0);
+		ssize_t sent = send(conn, ring_buffer[ring_read_index], (sizeof(uint32_t) * SAMPLES_PER_TRANSFER), MSG_NOSIGNAL);
+		if (sent < 0)
+			if (errno == EPIPE)
+			{
+				AdcStreamTerminate = 1;
+				apci_cancel_irq(apci, 1);
+				AdcStreamingConnection = -1;
+				AdcWorkerThreadID = -1;
+				AdcLoggerTerminate = 1;
+				continue;
+			}
 		pthread_mutex_unlock(&mutex);
 		sem_post(&empty);
 		Trace("Sent ADC Data "+std::to_string(sent)+" bytes, on ConnectionID: "+std::to_string(conn));
