@@ -1,6 +1,24 @@
 #pragma once
+/* // TODO:
+Upcoming change to centralize the construction of serialized data items:
+
+1) renaming all derived classes' .AsBytes() to eg ".CalcPayload()" thus removing .AsBytes from all derived classes
+2) adding ".CalcPayload()" to the root class for zero-length DataItem convenience
+3) removing this->pushDId() and this->pushLen() related code from all the derived classes .CalcPayload() implementations
+4) write .AsBytes in the root class that pushes the DId, Len(Data), and Data
+*/
+
+/* // TODO:
+Upcoming change to DataItems that "read one register and return the value":
+
+1) use a mezzanine class related to REG_Read1 with a virtual offset field
+2) each "read1return" type DataItem derives from that mezzanine, and consists of just a protected offset field
+
+*/
+
+
 /*
-A Message is received in a standardized format as an array of bytes, generally across TCP.
+A Message is received in a standardized format as an array of bytes (generally across TCP).
 
 This TMessage Library provides functions to:
 * "deserialize" a Message: convert an array of bytes into a TMessage
@@ -56,7 +74,7 @@ Each TDataItem in a Message represents an "Action", generally a read and/or a wr
 Messages serve to bundle TDataItem's Actions into atomic execution blocks.  All of the TDataItems in a Message are executed
 	in order without any TDataItems from other Clients' Messages squeezing between.
 
-The MId in the Response to Messages that encounter no errors "R" "Response".
+The MId in the Response to Messages that encounter no errors is "R", for "Response".
 The Response to Messages that are "well formed" (have valid syntax), even if other categories of errors are encountered,
 	will be a Message with the same number of TDataItems as the Message, such that "Response.Payload.TDataItem[index]"
 	provides the results (data read or written) of the corresponding "Message.Payload.TDataItem[index]".
@@ -174,12 +192,12 @@ int widthFromOffset(int ofs);
 #pragma endregion utility functions and templates
 
 /*	The following classes (TDataItem and its descendants) try to use a consistent convention
-	for the order Methods are listed
-
-	1) Deserialization stuff, used while converting bytes (received via TCP) into Objects
-	2) Serialization stuff, used to construct and convert Objects into byte vectors (for sending over TCP)
-	3) Verbs: stuff associated with using Objects as Actions, and the results thereof
-	4) diagnostic, debug, or otherwise "Rare" stuff, like .AsString()
+	for the order in which Methods are listed:
+		1) Deserialization stuff, used while converting bytes (received via TCP) into Objects
+		2) Serialization stuff, used to construct and convert Objects into byte vectors (for sending over TCP)
+		3) Verbs: stuff associated with using Objects as Actions, and the results thereof
+		4) diagnostic, debug, or otherwise "Rare" stuff, like .AsString()
+	Fields, if any, come last.
 */
 
 #pragma region "class TDataItem" declaration
@@ -204,6 +222,8 @@ public:
 
 	// index into DIdList; TODO: kinda belongs in a DIdList class method...
 	static int getDIdIndex(DataItemIds DId);
+	// serialize the Payload portion of the Data Item; calling this->calcPayload is done by TDataItem.AsBytes(), only
+	virtual TBytes calcPayload(bool bAsReply = false) {return Data;}
 	// serialize for sending via TCP; calling TDataItem.AsBytes() is normally done by TMessage::AsBytes()
 	virtual TBytes AsBytes(bool bAsReply=false);
 	// push DId into buf; utility for AsBytes()
@@ -263,6 +283,7 @@ private:
 	DataItemIds Id{0};
 };
 #pragma endregion TDataItem declaration
+
 #pragma region "class TDataItemNYI" declaration
 class TDataItemNYI : public TDataItem
 {
@@ -287,7 +308,7 @@ public:
 	// constructor of choice for source; all parameters included. TODO: ? make overloadable
 	TREG_Read1(DataItemIds DId, int ofs);
 	TREG_Read1 &setOffset(int ofs);
-	virtual TBytes AsBytes(bool bAsReply=false);
+	virtual TBytes calcPayload(bool bAsReply=false);
 
 	// 3) Verbs
 public:
@@ -332,62 +353,72 @@ public:
 	TREG_Write1();
 	~TREG_Write1();
 	TREG_Write1(TBytes buf);
-	virtual TBytes AsBytes(bool bAsReply=false);
+	virtual TBytes calcPayload(bool bAsReply=false);
 	//virtual std::string AsString(bool bAsReply=false);
 };
 #pragma endregion
 
 #pragma region "DAC Stuff"
-class TDIdDacOutput : public TDataItem
+class TDAC_Output : public TDataItem
 {
 public:
-	TDIdDacOutput(TBytes buf) : TDataItem::TDataItem{buf}{};
+	TDAC_Output(TBytes buf) : TDataItem::TDataItem{buf}{};
 };
 
-class TDIdDacRange1 : public TDataItem
+class TDAC_Range1 : public TDataItem
 {
 public:
-		TDIdDacRange1(TBytes buf) : TDataItem::TDataItem{buf} {};
+		TDAC_Range1(TBytes buf) : TDataItem::TDataItem{buf} {};
 };
 #pragma endregion
 
+#pragma region "BRD Stuff"
+class TBRD_FpgaID : public TDataItem
+{
+public:
+	TBRD_FpgaID(){ setDId(BRD_FpgaID); }
+	virtual TBytes calcPayload(bool bAsReply=false);
+	virtual TBRD_FpgaID &Go();
+	virtual std::string AsString(bool bAsReply = false);
+protected:
+	__u32 fpgaID = 0x00010005;
+};
+
+#pragma endregion
+
 #pragma region "ADC Stuff"
+
+class TADC_BaseClock : public TDataItem
+{
+public:
+	TADC_BaseClock(){ setDId(ADC_BaseClock);}
+	TADC_BaseClock(TBytes buf);
+	virtual TBytes calcPayload(bool bAsReply=false);
+	virtual TADC_BaseClock &Go();
+	virtual std::string AsString(bool bAsReply = false);
+protected:
+	__u32 baseClock = 25000000;
+};
+
 class TADC_StreamStart : public TDataItem
 {
-	// 1) Deserialization
 public:
 	TADC_StreamStart(TBytes buf);
-
-	// 2) Serialization: For creating Objects to be turned into bytes
-public:
-	TADC_StreamStart();
-	virtual TBytes AsBytes(bool bAsReply=false);
-
-	// 3) Verbs
+	TADC_StreamStart(){ setDId(ADC_StreamStart);};
+	virtual TBytes calcPayload(bool bAsReply=false);
 	virtual TADC_StreamStart &Go();
-
-	// 4) Diagnostic
 	virtual std::string AsString(bool bAsReply = false);
-
 protected:
 	int argConnectionID = -1;
 };
 
 class TADC_StreamStop : public TDataItem
 {
-	// 1) Deserialization
 public:
 	TADC_StreamStop(){ setDId(ADC_StreamStop);}
 	TADC_StreamStop(TBytes buf);
-
-	// 2) Serialization: For creating Objects to be turned into bytes
-public:
-	virtual TBytes AsBytes(bool bAsReply=false);
-
-	// 3) Verbs
+	virtual TBytes calcPayload(bool bAsReply=false);
 	virtual TADC_StreamStop &Go();
-
-	// 4) Diagnostic
 	virtual std::string AsString(bool bAsReply = false);
 };
 

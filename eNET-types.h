@@ -107,7 +107,9 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	//         return human-readable text of all TLA_ category DIds and what they do & why
 	BRD_ = 0x0000, // Query Only.
 	BRD_Reset,
-
+	BRD_DeviceID,
+	BRD_Features,
+	BRD_FpgaID,
 	BRD_stuff_needed_for_control_and_diagnostics_of_Linux_TCPIP_WDG_DEF_ETC, // TBD, long list
 
 	REG_ = 0x100, // Query Only.
@@ -185,6 +187,9 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	ADC_ = 0x1000,				   // Query Only. *1
 	ADC_Claim,
 	ADC_Release,
+	ADC_BaseClock,
+	ADC_StartHz,
+	ADC_StartDivisor,
 	ADC_ConfigurationOfEverything, // i.e., MId "C" to do ADC_ConfigureEverything; MId "Q" to do ADC_QueryEverythingsConfiguration
 	ADC_Range1,
 	ADC_RangeAll,

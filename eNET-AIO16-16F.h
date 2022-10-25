@@ -118,6 +118,11 @@ Frex: replace all the #defines with an abstract base class fields, then derive o
 #define ofsFlashData            0x74
 #define ofsFlashErase           0x78
 
+#define ofsFpgaID               0xA0
+#define ofsFeatures             0xA4
+#define ofsDeviceID             0xA8
+
+#define ofsAdcBaseClock         0xAC
 #define ofsAdcCalScale1         0xC0
 #define ofsAdcCalOffset1        0xC4
 #define ofsAdcCalScale2         0xC8

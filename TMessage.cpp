@@ -1,12 +1,19 @@
 /* // TODO:
 Upcoming change to centralize the construction of serialized data items:
 
-1) renaming all derived classes' .AsBytes() to i.e.,  ".CalcPayload()" thus removing .AsBytes from all derived classes
+1) renaming all derived classes' .AsBytes() to eg ".CalcPayload()" thus removing .AsBytes from all derived classes
 2) adding ".CalcPayload()" to the root class for zero-length DataItem convenience
 3) removing this->pushDId() and this->pushLen() related code from all the derived classes .CalcPayload() implementations
 4) write .AsBytes in the root class that pushes the DId, Len(Data), and Data
 */
 
+/* // TODO:
+Upcoming change to DataItems that "read one register and return the value":
+
+1) use a mezzanine class related to REG_Read1 with a virtual offset field
+2) each "read1return" type DataItem derives from that mezzanine, and consists of just a protected offset field
+
+*/
 
 #include <unistd.h>
 #include <cstdlib>
@@ -41,7 +48,7 @@ int widthFromOffset(int ofs)
 {
 	if (ofs < 0x18)
 		return 8;
-	else if ((ofs <= 0xDC) && (ofs % 4 == 0))
+	else if ((ofs <= 0xFC) && (ofs % 4 == 0))
 		return 32;
     return 0;
 }
@@ -52,6 +59,10 @@ TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
 	{BRD_, 0, 0, 255, construct<TDataItem>, "TDataItem Base (BRD_)"},
 	{BRD_Reset, 0, 0, 0, construct<TDataItem>, "BRD_Reset(void)"},
+	{BRD_DeviceID, 0, 4, 255, construct<TDataItem>, "BRD_DeviceID() → u16"},
+	{BRD_Features, 0, 4, 255, construct<TDataItem>, "BRD_Features() → u8"},
+	{BRD_FpgaID, 0, 4, 255, construct<TDataItem>, "BRD_FpgaID() → u32"},
+
 	{REG_Read1, 1, 1, 1, construct<TREG_Read1>, "REG_Read1(u8 offset) → [u8|u32]"},
 	DIdNYI(REG_ReadAll),
 	DIdNYI(REG_ReadSome),
@@ -64,10 +75,10 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(REG_ToggleBits),
 
 	{DAC_, 0, 0, 0, construct<TDataItem>, "TDataItemBase (DAC_)"},
-	{DAC_Output1, 5, 5, 5, construct<TDIdDacOutput>, "DAC_Output1(u8 iDAC, single Volts)"},
+	{DAC_Output1, 5, 5, 5, construct<TDAC_Output>, "DAC_Output1(u8 iDAC, single Volts)"},
 	DIdNYI(DAC_OutputAll),
 	DIdNYI(DAC_OutputSome),
-	{DAC_Range1, 5, 5, 5, construct<TDIdDacRange1>, "DAC_Range1(u8 iDAC, u32 RangeCode)"},
+	{DAC_Range1, 5, 5, 5, construct<TDAC_Range1>, "DAC_Range1(u8 iDAC, u32 RangeCode)"},
 	DIdNYI(DAC_Configure1),
 	DIdNYI(DAC_ConfigureAll),
 	DIdNYI(DAC_ConfigureSome),
@@ -118,6 +129,10 @@ TDIdListEntry const DIdList[] = {
 	DIdNYI(ADC_),
 	DIdNYI(ADC_Claim),
 	DIdNYI(ADC_Release),
+
+	{ADC_BaseClock, 0, 0, 4, construct<TDataItem>, "ADC_BaseClock() → u32"},
+	{ADC_StartHz, 4, 4, 4, construct<TDataItem>, "ADC_StartHz(f32)"},
+	{ADC_StartDivisor, 4, 4, 4, construct<TDataItem>, "ADC_StartDivisor(u32)"},
 	DIdNYI(ADC_ConfigurationOfEverything),
 	DIdNYI(ADC_Range1),
 	DIdNYI(ADC_RangeAll),
@@ -340,6 +355,13 @@ TDataItem::TDataItem(DataItemIds DId)
 	this->setDId(DId);
 };
 
+// TError foo()
+// {
+// 	TError result = ERR_SUCCESS;
+
+// 	return ERR_SUCCESS;
+// }
+
 // parses vector of bytes (presumably received across TCP socket) into a TDataItem
 TDataItem::TDataItem(TBytes bytes) : TDataItem()
 {
@@ -402,6 +424,7 @@ TBytes TDataItem::AsBytes(bool bAsReply)
 	Trace("ENTER, bAsReply = " + std::to_string(bAsReply));
 	TBytes bytes;
 	this->pushDId(bytes);
+	this->Data = this->calcPayload(bAsReply);
 	this->pushLen(bytes, this->Data.size());
 
 	bytes.insert(end(bytes), begin(Data), end(Data));
@@ -544,15 +567,9 @@ TREG_Read1 &TREG_Read1::setOffset(int ofs)
 	return *this;
 }
 
-TBytes TREG_Read1::AsBytes(bool bAsReply)
+TBytes TREG_Read1::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	this->pushDId(bytes);
-	int w = 1;
-	if (bAsReply)
-		w += this->width / 8;
-	Trace("Payload len: " + std::to_string(w));
-	this->pushLen(bytes, w);
 	bytes.push_back(this->offset);
 
 	if (bAsReply){
@@ -565,18 +582,18 @@ TBytes TREG_Read1::AsBytes(bool bAsReply)
 		}
 	}
 
-	Trace("TREG_Read1::AsBytes built: ", bytes);
+	Trace("TREG_Read1::calcPayload built: ", bytes);
 	return bytes;
 }
 
 string TREG_Read1::AsString(bool bAsReply)
 {
 	stringstream dest;
-
+Log("TREG_Read1("+std::to_string(bAsReply)+")");
 	dest << "REG_Read1(" << hex << setw(2) << setfill('0') << static_cast<int>(this->offset) << ")";
 	if (bAsReply)
 	{
-		dest << " -> ";
+		dest << " → ";
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
 		if (this->width == 8){
@@ -757,12 +774,9 @@ TREG_Write1::TREG_Write1(TBytes buf)
 	this->addWrite(w, ofs, value);
 }
 
-TBytes TREG_Write1::AsBytes(bool bAsReply)
+TBytes TREG_Write1::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	this->pushDId(bytes);
-	int w = 1 + this->Writes[0].width / 8;
-	this->pushLen(bytes, w);
 	if (this->Writes.size() > 0 )
 		bytes.push_back(this->Writes[0].offset);
 	else
@@ -779,9 +793,78 @@ TBytes TREG_Write1::AsBytes(bool bAsReply)
 
 #pragma endregion
 
+#pragma region "BRD Stuff"
+
+TBytes TBRD_FpgaID::calcPayload(bool bAsReply)
+{
+	TBytes bytes;
+	auto id = this->fpgaID;
+	if (bAsReply)
+	{
+		for (int i = 0; i < sizeof(id); i++)
+		{
+			bytes.push_back(id & 0x000000FF);
+			id >>= 8;
+		}
+	}
+	return bytes;
+}
+
+TBRD_FpgaID &TBRD_FpgaID::Go()
+{
+	apci_read32(apci, 1, BAR_REGISTER, ofsFpgaID, &this->fpgaID);
+	return *this;
+}
+
+std::string TBRD_FpgaID::AsString(bool bAsReply)
+{
+	if (bAsReply)
+		return "BRD_FpgaID() → " + to_hex<__u32>(this->fpgaID);
+	else
+		return "BRD_FpgaID()";
+}
+
+#pragma endregion
+
 #pragma region "ADC Stuff"
-TADC_StreamStart::TADC_StreamStart() {
-	setDId(ADC_StreamStart);
+TADC_BaseClock::TADC_BaseClock(TBytes buf)
+{
+	this->setDId(ADC_BaseClock);
+	GUARD((buf.size() == 0) || (buf.size() == 4), ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
+}
+
+TBytes TADC_BaseClock::calcPayload(bool bAsReply)
+{
+	TBytes bytes;
+	__u32 clk = this->baseClock;
+	for (int i = 0; i < sizeof(clk); i++)
+	{
+		bytes.push_back(clk & 0x000000FF);
+		clk >>= 8;
+	}
+
+	Trace("TADC_BaseClock::calcPayload built: ", bytes);
+	return bytes;
+};
+
+TADC_BaseClock &TADC_BaseClock::Go()
+{
+	Trace("ADC_BaseClock Go()");
+	apci_read32(apci, 0, BAR_REGISTER, ofsAdcBaseClock, &this->baseClock);
+	return *this;
+}
+
+string TADC_BaseClock::AsString(bool bAsReply)
+{
+	stringstream dest;
+
+	dest << "ADC_BaseClock()";
+	if (bAsReply)
+	{
+		dest << " → " << this->baseClock;
+	}
+	Trace("Built: " + dest.str());
+	return dest.str();
 }
 
 TADC_StreamStart::TADC_StreamStart(TBytes buf)
@@ -805,19 +888,16 @@ TADC_StreamStart::TADC_StreamStart(TBytes buf)
 	Trace("AdcStreamingConnection: "+std::to_string(AdcStreamingConnection));
 }
 
-TBytes TADC_StreamStart::AsBytes(bool bAsReply)
+TBytes TADC_StreamStart::calcPayload(bool bAsReply)
 {
-	this->setDId(ADC_StreamStart);
 	TBytes bytes;
-	this->pushDId(bytes);
-	this->pushLen(bytes, 4);
 	auto con = this->argConnectionID;
 	for (int i = 0; i < sizeof(con); i++)
 	{
 		bytes.push_back(con & 0x000000FF);
 		con >>= 8;
 	}
-	Trace("TADC_StreamStart::AsBytes built: ", bytes);
+	Trace("TADC_StreamStart::calcPayload built: ", bytes);
 	return bytes;
 };
 
@@ -858,15 +938,9 @@ TADC_StreamStop::TADC_StreamStop(TBytes buf)
 	GUARD(buf.size() == 0, ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH, 0);
 }
 
-TBytes TADC_StreamStop::AsBytes(bool bAsReply)
+TBytes TADC_StreamStop::calcPayload(bool bAsReply)
 {
-
-	this->setDId(ADC_StreamStop);
 	TBytes bytes;
-	this->pushDId(bytes);
-	int w = 0;
-	this->pushLen(bytes, w);
-	Trace("TADC_StreamStop::AsBytes built: ", bytes);
 	return bytes;
 };
 
@@ -1174,9 +1248,9 @@ string TMessage::AsString(bool bAsReply)
 {
 
 	stringstream dest;
-	TBytes raw = this->AsBytes(bAsReply);
-	Trace("TMessage, Raw Bytes: ", raw);
-	dest << "Message = MId:" << to_hex<__u8>(this->getMId()) << ", csum: " << to_hex<__u8>(raw.back())<< ", DataItems: " << DataItems.size();
+	//TBytes raw = this->AsBytes(bAsReply);
+	//Trace("TMessage, Raw Bytes: ", raw);
+	dest << "Message = MId:" << to_hex<__u8>(this->getMId()) << ", # DataItems: " << DataItems.size();
 	if (DataItems.size() != 0)
 	{
 		for (int itemNumber = 0; itemNumber < DataItems.size(); itemNumber++)
