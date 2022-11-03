@@ -53,6 +53,30 @@ int widthFromOffset(int ofs)
     return 0;
 }
 
+
+/*
+// TODO:
+	Upgrade the TDIdListEntry struct to include pointers to functions for calcPayload() and Go(), plus
+	void * arguments for each.
+
+	Then create a wrapper TDataItem descendant that calls those function pointers (if they aren't NULL) inside
+	its .Go() and .calcPayload(), passing in the void * argument to each.
+
+	This would, for example, allow all of the Data Items that are effectively REG_Read1() to
+	have no classes explicitly in the source: just entries in the DIdList[].
+
+	Similarly for all the Data Items that amount to REG_Write1(), like setting most (individual) ADC options.
+
+	More complex but still re-usable calcPayload or Go can be implemented with new structs as the void * args.
+
+	Perhaps a set of DIds that amount to "run this system command line" and they are simply passed a string.
+
+	?Note: make sure that .AsString() has enough information to do its job "well"; otherwise add another field
+	to TDIdListEntry as needed?  Either the string for .AsString() or another function pointer and void * arg.
+
+*/
+
+
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d " (NYI)"}
 // DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
 TDIdListEntry const DIdList[] = {
@@ -134,6 +158,9 @@ TDIdListEntry const DIdList[] = {
 	{ADC_StartHz, 4, 4, 4, construct<TDataItem>, "ADC_StartHz(f32)"},
 	{ADC_StartDivisor, 4, 4, 4, construct<TDataItem>, "ADC_StartDivisor(u32)"},
 	DIdNYI(ADC_ConfigurationOfEverything),
+	DIdNYI(ADC_Differential1),
+	DIdNYI(ADC_DifferentialAll),
+	DIdNYI(ADC_DifferentialSome),
 	DIdNYI(ADC_Range1),
 	DIdNYI(ADC_RangeAll),
 	DIdNYI(ADC_RangeSome),
@@ -199,7 +226,7 @@ TDIdListEntry const DIdList[] = {
 //   specific validate and parse appropriate to that DataItemID
 int TDataItem::validateDataItemPayload(DataItemIds DId, TBytes Data)
 {
-	Trace("ENTER, DId: "+ std::to_string(DId), Data);
+	Trace("ENTER, DId: "+ to_hex<TDataId>(DId)+": ", Data);
 	int result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
 	int index = TDataItem::getDIdIndex(DId);
 	TDataItemLength len = Data.size();
@@ -313,7 +340,7 @@ int TDataItem::validateDataItem(TBytes msg)
 PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 {
 	result = ERR_SUCCESS;
-	Trace("Received = ", msg);
+	Debug("Received = ", msg);
 
 	GUARD((msg.size() >= sizeof(TDataItemHeader)), ERR_MSG_DATAITEM_TOO_SHORT, msg.size());
 
@@ -337,6 +364,7 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 			return PTDataItem(new TDataItem());
 		}
 	}
+	Log("TDataItem::fromBytes sending to constructor: ", data);
 	for (auto entry : DIdList)
 		if (entry.DId == head->DId){
 			auto item = entry.Construct(data);
@@ -355,12 +383,6 @@ TDataItem::TDataItem(DataItemIds DId)
 	this->setDId(DId);
 };
 
-// TError foo()
-// {
-// 	TError result = ERR_SUCCESS;
-
-// 	return ERR_SUCCESS;
-// }
 
 // parses vector of bytes (presumably received across TCP socket) into a TDataItem
 TDataItem::TDataItem(TBytes bytes) : TDataItem()
@@ -824,7 +846,161 @@ std::string TBRD_FpgaID::AsString(bool bAsReply)
 		return "BRD_FpgaID()";
 }
 
+
+TBytes TBRD_DeviceID::calcPayload(bool bAsReply)
+{
+	TBytes bytes;
+	auto id = this->deviceID;
+	if (bAsReply)
+	{
+		for (int i = 0; i < sizeof(id); i++)
+		{
+			bytes.push_back(id & 0x000000FF);
+			id >>= 8;
+		}
+	}
+	return bytes;
+}
+
+TBRD_DeviceID &TBRD_DeviceID::Go()
+{
+	__u32 value;
+	apci_read32(apci, 1, BAR_REGISTER, ofsDeviceID, &value);
+	this->deviceID = value & 0xFFFF;
+	return *this;
+}
+
+std::string TBRD_DeviceID::AsString(bool bAsReply)
+{
+	if (bAsReply)
+		return "BRD_DeviceID() → " + to_hex<__u16>(this->deviceID);
+	else
+		return "BRD_DeviceID()";
+}
+
+
+
+TBytes TBRD_Features::calcPayload(bool bAsReply)
+{
+	TBytes bytes;
+	auto id = this->features;
+	if (bAsReply)
+	{
+		for (int i = 0; i < sizeof(id); i++)
+		{
+			bytes.push_back(id & 0x000000FF);
+			id >>= 8;
+		}
+	}
+	return bytes;
+}
+
+TBRD_Features &TBRD_Features::Go()
+{
+	__u32 value;
+	apci_read32(apci, 1, BAR_REGISTER, ofsFeatures, &value);
+	this->features = value & 0xFF;
+	return *this;
+}
+
+std::string TBRD_Features::AsString(bool bAsReply)
+{
+	if (bAsReply)
+		return "BRD_Features() → " + to_hex<__u16>(this->features);
+	else
+		return "BRD_Features()";
+}
+
 #pragma endregion
+
+int WriteConfigSetting(string key, string value, string file="config.current");
+
+#pragma region "DAC Stuff"
+
+TDAC_Range1::TDAC_Range1(TBytes bytes)
+{
+	Debug("Received: ", bytes);
+	setDId(DAC_Range1);
+	TError result = ERR_SUCCESS;
+	this->Data = bytes;
+
+	if (bytes.size() >= 1)
+	{
+		GUARD(this->Data[0] < 4, ERR_DId_BAD_PARAM, this->Data[0]);
+		this->dacChannel = this->Data[0];
+		this->dacRange = 0xFFFFFFFF;
+		this->bWrite = false;
+	}
+	if (bytes.size() == 5)
+	{
+		__u32 rangeCode = this->Data[1] | this->Data[2] << 8 | this->Data[3] << 16 | this->Data[4] << 24;
+		if((rangeCode < 4)
+		|| (rangeCode==0x30313055)
+		|| (rangeCode==0x35303055)
+		|| (rangeCode==0x3530E142)
+		|| (rangeCode==0x3031E142))
+		{
+			this->bWrite = true;
+			this->dacRange = rangeCode;
+			Log("DAC "+std::to_string(this->dacChannel)+" range set to "+to_hex<__u32>(this->dacRange));
+		}
+	}
+	return;
+}
+
+TBytes TDAC_Range1::calcPayload(bool bAsReply)
+{
+	TBytes bytes;
+	bytes.push_back(this->dacChannel);
+	bytes.push_back(this->dacRange & 0xFF);
+	bytes.push_back((this->dacRange >> 8) & 0xFF);
+	bytes.push_back((this->dacRange >> 16) & 0xFF);
+	bytes.push_back((this->dacRange >> 24) & 0xFF);
+	return bytes;
+};
+
+TDAC_Range1 &TDAC_Range1::Go()
+{
+	if (this->bWrite)
+	{
+		// if (permissions(this->permissions, bmConfigFileWrite)) // TODO: something here
+		// if (this->dacRange != Config.dacRanges[this->dacChannel])
+		{
+			// write DAC_Range config file data
+			if (0 > WriteConfigSetting("DAC_RangeCh"+std::to_string(this->dacChannel), std::to_string(this->dacRange)))
+			{
+				// handle write error
+				this->dacRange = Config.dacRanges[this->dacChannel];
+				Error("Failed to write config setting DAC_RangeCh");
+			}
+			else
+				Config.dacRanges[this->dacChannel] = this->dacRange;
+			;
+
+			//   ?OR?   issue registered callback into aioenetd so it will
+			// if (this->OnWrite != nullptr)
+				// this->OnWrite(this->dacChannel, this->dacRange);
+		}
+	}
+	else
+	{
+		// read DAC_Range1; handled by .AsBytes/.AsString
+		// if (this->OnRead != nullptr)
+			// this->OnRead(dacChannel);
+	}
+	return *this;
+};
+
+std::string TDAC_Range1::AsString(bool bAsReply)
+{
+	// NYI
+	return "d";
+};
+#pragma endregion
+
+
+
+
 
 #pragma region "ADC Stuff"
 TADC_BaseClock::TADC_BaseClock(TBytes buf)
@@ -1087,7 +1263,7 @@ TPayload TMessage::parsePayload(TBytes Payload, __u32 payload_length, TError &re
 		if (DataItemLength > payload_length)
 		{
 			result = ERR_MSG_PAYLOAD_DATAITEM_LEN_MISMATCH;
-			Error("TMessage::parsePayload: DIAG::fromBytes DataItemLength > payload_length returned error " + std::to_string(result) + ", " + err_msg[-result]);
+			Error("TMessage::parsePayload: DataItemLength > payload_length returned error " + std::to_string(result) + ", " + err_msg[-result]);
 			break;
 		}
 

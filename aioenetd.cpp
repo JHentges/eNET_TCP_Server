@@ -200,8 +200,11 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "TMessage.h"
 #include "apcilib.h"
 #include "adc.h"
+#include "config.h"
 
-#define VersionString "0.2.3"
+#define VersionString "0.2.4"
+
+TConfig Config;
 
 int apci = -1;
 bool done = false;
@@ -224,6 +227,7 @@ TActionQueue ActionQueue;
 TActionQueue ReplyQueue; // J2H: consider one per ReceiveThread...(i.e., make one ReplyThread per ReceiveThread, each with an associated queue)
 
 static void sig_handler(int sig);
+void LoadConfig();
 void OpenDevFile();
 void Intro(int argc, char **argv);
 void HandleNewAdcClients(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs);
@@ -234,15 +238,24 @@ void *AdcListenerThread(void *arg);
 pthread_t action_thread;
 pthread_t controlListener_thread;
 pthread_t adcListener_thread;
+pthread_t controlListener6_thread;
+pthread_t adcListener6_thread;
 
 int main(int argc, char *argv[])
 {
 	Intro(argc, argv);
+	LoadConfig();
 	OpenDevFile(); // sets apci
 
 	pthread_create(&action_thread, NULL, (void*(*)(void *))&ActionThread, &ActionQueue);
-	pthread_create(&controlListener_thread, NULL, ControlListenerThread, nullptr);
-	pthread_create(&adcListener_thread, NULL, AdcListenerThread, nullptr);
+
+	// pthread_create(&controlListener_thread, NULL, ControlListenerThread, (void*)AF_INET);
+	// pthread_create(&adcListener_thread, NULL, AdcListenerThread, (void*)AF_INET);
+
+	pthread_create(&controlListener6_thread, NULL, ControlListenerThread, (void*)AF_INET6);
+	pthread_create(&adcListener6_thread, NULL, AdcListenerThread, (void*)AF_INET6);
+
+	sleep(2);
 	do
 	{
 		usleep(100000);
@@ -291,9 +304,13 @@ void OpenDevFile()
 	Log("Opening device @ " + devicefile);
 }
 
-void Bind(int &Socket, int &Port, struct sockaddr_in &addr)
+void Bind(int &Socket, int &Port, void * structaddr, int iNET)
 {
-	if ((Socket = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+	struct sockaddr_in * addr4 = (sockaddr_in *)structaddr;
+	struct sockaddr_in6 * addr6 = (sockaddr_in6 *)structaddr;
+	int result = -1;
+
+	if ((Socket = socket(iNET, SOCK_STREAM, 0)) == 0)
 	{
 		perror("socket failed");
 		exit(EXIT_FAILURE);
@@ -306,14 +323,33 @@ void Bind(int &Socket, int &Port, struct sockaddr_in &addr)
 		perror("setsockopt failed");
 		exit(EXIT_FAILURE);
 	}
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(Port);
-	if (bind(Socket, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+
+	if (iNET == AF_INET){
+		addr4->sin_family = AF_INET;
+		addr4->sin_port = htons(Port);
+		addr4->sin_addr.s_addr = INADDR_ANY;
+		result = bind(Socket, (struct sockaddr *)addr4, sizeof(sockaddr_in));
+		if (result < 0)
+		{
+			Error("Bind on port " + std::to_string(Port) + " failed");
+			exit(EXIT_FAILURE);
+		}
+	}
+	else // if (iNET == AF_INET6)
 	{
-		Error("Bind on port " + std::to_string(Port) + " failed");
-		perror("Bind on port failed");
-		exit(EXIT_FAILURE);
+		addr6->sin6_family = AF_INET6;
+		addr6->sin6_port = htons(Port);
+		addr6->sin6_flowinfo = 0x607ACCE5;
+		addr6->sin6_addr = IN6ADDR_ANY_INIT;
+		//addr6->sin6_scope_id = 0x0e;
+		result = bind(Socket, (struct sockaddr *)addr6, sizeof(sockaddr_in6));
+		if (result < 0)
+		{
+			Error("Bind on port " + std::to_string(Port) + " failed");
+			perror("Bind failed: ");
+			exit(EXIT_FAILURE);
+		}
+
 	}
 }
 
@@ -329,15 +365,24 @@ void Listen(int &Socket, int num)
 
 void *ControlListenerThread(void* arg)
 {
-	struct sockaddr_in ControlAddr;
+	int iNET = (__s64)arg;
+	struct sockaddr_in ControlAddr4;
+	struct sockaddr_in6 ControlAddr6;
 	int ControlSocket, ControlAddrSize;
 	std::vector<int> ControlClients;
 	fd_set ControlFDs;
-	Bind(ControlSocket, ControlListenPort, ControlAddr);
-	ControlAddrSize = sizeof(ControlAddr);
+
+	if (iNET == AF_INET6){
+		Bind(ControlSocket, ControlListenPort, &ControlAddr6, AF_INET6);
+		ControlAddrSize = sizeof(ControlAddr6);
+	}else{
+		Bind(ControlSocket, ControlListenPort, &ControlAddr4, AF_INET);
+		ControlAddrSize = sizeof(ControlAddr4);
+	}
+	Log("Listen for Control Socket");
 	Listen(ControlSocket, 32);
 	for (;;)
-		HandleNewControlClients(ControlSocket, ControlAddrSize, ControlClients, ControlAddr, ControlFDs);
+		HandleNewControlClients(ControlSocket, ControlAddrSize, ControlClients, ControlAddr4, ControlFDs);
 	ControlClients.clear();
 	return nullptr;
 }
@@ -357,9 +402,10 @@ void SendAdcHello(int Socket)
 	}
 }
 
-void HandleNewAdcClients(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs)
+void HandleNewAdcClients(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in * addr, fd_set &ReadFDs)
 {
 	int new_socket;
+	Log("accept ADC");
 	if ((new_socket = accept(Socket, (struct sockaddr *)&addr, (socklen_t *)&addrSize)) < 0)
 	{
 		Error("accept failed");
@@ -371,17 +417,30 @@ void HandleNewAdcClients(int Socket, int addrSize, std::vector<int> &ClientList,
 
 void *AdcListenerThread(void* arg)
 {
-	struct sockaddr_in AdcAddr;
+	int iNET = (__s64 )arg;
+	struct sockaddr_in AdcAddr4;
+	struct sockaddr_in6 AdcAddr6;
 	int AdcSocket, AdcAddrSize, bytesRead;
 	char buffer[maxPayloadLength + minimumMessageLength + 1]; // data buffer of 1K // TODO: FIX: there shouldn't be both a byte array and a vector; resolve
 	std::vector<int> AdcClients;
 	fd_set AdcFDs;
 
-	Bind(AdcSocket, AdcListenPort, AdcAddr);
-	AdcAddrSize = sizeof(AdcAddr);
-	Listen(AdcSocket, 1);
-	for (;;)
-		HandleNewAdcClients(AdcSocket, AdcAddrSize, AdcClients, AdcAddr, AdcFDs);
+	if (iNET == AF_INET6){
+		Log("Binding ADC for IPv6");
+		Bind(AdcSocket, AdcListenPort, &AdcAddr6, iNET);
+		AdcAddrSize = sizeof(AdcAddr6);
+		Listen(AdcSocket, 1);
+		for (;;)
+			HandleNewAdcClients(AdcSocket, AdcAddrSize, AdcClients, (sockaddr_in *)&AdcAddr6, AdcFDs);
+	}else{
+		Log("Binding ADC for IPv4");
+		Bind(AdcSocket, AdcListenPort, &AdcAddr4, iNET);
+		AdcAddrSize = sizeof(AdcAddr4);
+		Log("Listen ADC for on IPv6");
+		Listen(AdcSocket, 1);
+		for (;;)
+			HandleNewAdcClients(AdcSocket, AdcAddrSize, AdcClients, (sockaddr_in *)&AdcAddr4, AdcFDs);
+	}
 	AdcClients.clear();
 	return nullptr;
 }
@@ -397,26 +456,24 @@ void SendControlHello(int Socket)
 	Payload.push_back(d2);
 
 	//__u32 dacRangeDefault = 0x3031E142;
-	__u32 dacRangeDefault = 0x35303055; // FIX: TODO: should be read from non-volatile memory not hard-coded.
+	//__u32 dacRangeDefault = 0x35303055; // FIX: TODO: should be read from non-volatile memory not hard-coded.
 	for (int channel = 0; channel < 4; channel++)
 	{
 		data.clear(); data.push_back(channel);
-		for (int byt = 0; byt < sizeof(dacRangeDefault); byt++)
-			data.push_back((dacRangeDefault >> (8 * byt)) & 0x000000FF);
+		for (int byt = 0; byt < sizeof(Config.dacRanges[channel]); byt++)
+			data.push_back((Config.dacRanges[channel] >> (8 * byt)) & 0x000000FF);
 		d2 = std::unique_ptr<TDataItem>(new TDataItem(DAC_Range1, data));
 		Payload.push_back(d2);
 	}
 
-	PTDataItem fpgaId = std::unique_ptr<TBRD_FpgaID>(new TBRD_FpgaID()); // BRD_FpgaID
-	data.clear(); data.push_back(0xA4);
-	PTDataItem regA4 = std::unique_ptr<TREG_Read1>(new TREG_Read1(data)); // BRD_FeatureDetect
-	data.clear(); data.push_back(0xA8);
-	PTDataItem regA8 = std::unique_ptr<TREG_Read1>(new TREG_Read1(data)); // BRD_DeviceID
-	PTDataItem adcBaseClock = std::unique_ptr<TADC_BaseClock>(new TADC_BaseClock()); // ADC_BaseClock
+	PTDataItem fpgaId = std::unique_ptr<TBRD_FpgaID>(new TBRD_FpgaID());
+	PTDataItem features = std::unique_ptr<TBRD_Features>(new TBRD_Features());
+	PTDataItem deviceID = std::unique_ptr<TBRD_DeviceID>(new TBRD_DeviceID());
+	PTDataItem adcBaseClock = std::unique_ptr<TADC_BaseClock>(new TADC_BaseClock());
 	try{
 		fpgaId->Go(); Payload.push_back(fpgaId);
-		regA4->Go(); Payload.push_back(regA4);
-		regA8->Go(); Payload.push_back(regA8);
+		features->Go(); Payload.push_back(features);
+		deviceID->Go(); Payload.push_back(deviceID);
 		adcBaseClock->Go(); Payload.push_back(adcBaseClock);
 	}
 	catch(std::logic_error e)
@@ -522,13 +579,14 @@ void *threadReceiver(void *arg) // J2H: In progress
 			}
 		}
 	} while (1);
-	Log("Closing threadReceiver for connection" + std::to_string(controlSocket));
+	Log("Closing threadReceiver for connection " + std::to_string(controlSocket));
 	return nullptr;
 }
 
 void HandleNewControlClients(int ControlListenSocket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs)
 {
 	int new_socket;
+	Log("Accept for Control");
 	if ((new_socket = accept(ControlListenSocket, (struct sockaddr *)&addr, (socklen_t *)&addrSize)) < 0)
 	{
 		Error("accept failed");
@@ -586,10 +644,11 @@ void *ActionThread(TActionQueue * Q)
 		TActionQueueItem *anAction = ActionQueue.dequeue();
 		Log("---DEQUEUED---");
 		RunMessage(anAction->theMessage);
-		SendResponse(anAction->Socket, anAction->theMessage);
+		SendResponse(anAction->Socket, anAction->theMessage); // move to send threads?
 		free(anAction);
 	}
 }
+
 
 //------------------- Signal---------------------------
 #define max_BRK_attempts 3

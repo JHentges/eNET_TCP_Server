@@ -191,6 +191,9 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	ADC_StartHz,
 	ADC_StartDivisor,
 	ADC_ConfigurationOfEverything, // i.e., MId "C" to do ADC_ConfigureEverything; MId "Q" to do ADC_QueryEverythingsConfiguration
+	ADC_Differential1,
+	ADC_DifferentialAll,
+	ADC_DifferentialSome,
 	ADC_Range1,
 	ADC_RangeAll,
 	ADC_RangeSome,
@@ -272,5 +275,10 @@ typedef struct TSendQueueItemClass
 	int portSend;
 } TSendQueueItem;
 
+typedef struct TConfigStruct
+{
+	__u32 dacRanges[4];
+} TConfig;
+extern TConfig Config;
 
 #pragma pack(pop)

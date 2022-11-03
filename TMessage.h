@@ -183,7 +183,7 @@ GUARD(bool allGood, TError resultcode, int intInfo,
 	  int Line = __builtin_LINE(), const char *File = __builtin_FILE(), const char *Func = __builtin_FUNCTION())
 {
 	if (!(allGood))
-		throw std::logic_error(std::string(File) + ": " + std::string(Func) + "(" + std::to_string(Line) + "): " + std::to_string(resultcode) + " = " + to_hex(intInfo));
+		throw std::logic_error(std::string(File) + ": " + std::string(Func) + "(" + std::to_string(Line) + "): " + std::to_string(-resultcode) + " = " + std::to_string(intInfo));
 }
 
 // return register width for given offset as defined for eNET-AIO registers
@@ -279,8 +279,9 @@ protected:
 	TError resultCode;
 	int conn;
 
-private:
+protected:
 	DataItemIds Id{0};
+	bool bWrite = false;
 };
 #pragma endregion TDataItem declaration
 
@@ -358,20 +359,6 @@ public:
 };
 #pragma endregion
 
-#pragma region "DAC Stuff"
-class TDAC_Output : public TDataItem
-{
-public:
-	TDAC_Output(TBytes buf) : TDataItem::TDataItem{buf}{};
-};
-
-class TDAC_Range1 : public TDataItem
-{
-public:
-		TDAC_Range1(TBytes buf) : TDataItem::TDataItem{buf} {};
-};
-#pragma endregion
-
 #pragma region "BRD Stuff"
 class TBRD_FpgaID : public TDataItem
 {
@@ -382,6 +369,51 @@ public:
 	virtual std::string AsString(bool bAsReply = false);
 protected:
 	__u32 fpgaID = 0x00010005;
+};
+
+class TBRD_DeviceID : public TDataItem
+{
+public:
+	TBRD_DeviceID(){ setDId(BRD_DeviceID); }
+	virtual TBytes calcPayload(bool bAsReply=false);
+	virtual TBRD_DeviceID &Go();
+	virtual std::string AsString(bool bAsReply = false);
+protected:
+	__u16 deviceID = 0;
+};
+
+class TBRD_Features : public TDataItem
+{
+public:
+	TBRD_Features(){ setDId(BRD_Features); }
+	virtual TBytes calcPayload(bool bAsReply=false);
+	virtual TBRD_Features &Go();
+	virtual std::string AsString(bool bAsReply = false);
+protected:
+	__u8 features = 0;
+};
+
+
+#pragma endregion
+
+#pragma region "DAC Stuff"
+class TDAC_Output : public TDataItem
+{
+public:
+	TDAC_Output(TBytes buf) : TDataItem::TDataItem{buf}{};
+};
+
+class TDAC_Range1 : public TDataItem
+{
+public:
+	TDAC_Range1(TBytes buf);
+	TDAC_Range1(){ setDId(DAC_Range1);};
+	virtual TBytes calcPayload(bool bAsReply=false);
+	virtual std::string AsString(bool bAsReply = false);
+	virtual TDAC_Range1 &Go();
+protected:
+	__u8 dacChannel = 0;
+	__u32 dacRange = 0;
 };
 
 #pragma endregion
