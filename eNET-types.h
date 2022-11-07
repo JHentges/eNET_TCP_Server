@@ -29,6 +29,7 @@ typedef uint32_t __u32;
 #include <thread>
 
 #include "safe_queue.h"
+#include "TError.h"
 
 /* type definitions */
 typedef std::vector<__u8> TBytes;
@@ -227,13 +228,14 @@ enum DataItemIds : TDataId // specific numbering, ordering, and grouping are pre
 	SCRIPT_Pause, // insert a pause in execution of TDataItems
 
 	// broken out from "BRD_stuff_needed_for_control_and_diagnostics_of_Linux_TCPIP_WDG_DEF_ETC" mentioned above
-	WDG_ = 0x4000, // Watchdog related
-	DEF_ = 0x5000, // power-on default state related
-	SERVICE_,	   // tech support stuff
-	TCP_ = 0x7000,		   // TCP-IP stuff broken out from the
+	WDG_ = 0x4000,	// Watchdog related
+	DEF_ = 0x5000,	// power-on default state related
+	SERVICE_,		// tech support stuff
+	TCP_ = 0x7000,	// TCP-IP stuff broken out from the
 	TCP_ConnectionID = 0x7001,
-	PNP_,		   // distinct from BRD_?
-	CFG_,		   // "Other" Configuration stuff; Linux, IIoT protocol selection, etc?
+	PNP_,			// distinct from BRD_?
+	CFG_ = 0x9000,	// "Other" Configuration stuff; Linux, IIoT protocol selection, etc?
+	CFG_Hostname,
 };
 #pragma endregion
 
@@ -278,7 +280,41 @@ typedef struct TSendQueueItemClass
 typedef struct TConfigStruct
 {
 	__u32 dacRanges[4];
+	std::string Hostname;
 } TConfig;
 extern TConfig Config;
 
 #pragma pack(pop)
+
+#define s_print(s, ...)              \
+	{                                \
+		if (s)                       \
+			sprintf(s, __VA_ARGS__); \
+		else                         \
+			printf(__VA_ARGS__);     \
+	}
+template <typename T>
+std::vector<T> slicing(std::vector<T> const &v, int Start, int End)
+{
+
+	// Begin and End iterator
+	auto first = v.begin() + Start;
+	auto last = v.begin() + End + 1;
+
+	// Copy the element
+	std::vector<T> vector(first, last);
+
+	// Return the results
+	return vector;
+}
+
+
+// throw exception if conditional is false
+inline void
+GUARD(bool allGood, TError resultcode, int intInfo,
+	  int Line = __builtin_LINE(), const char *File = __builtin_FILE(), const char *Func = __builtin_FUNCTION())
+{
+	if (!(allGood))
+		throw std::logic_error(std::string(File) + ": " + std::string(Func) + "(" + std::to_string(Line) + "): " + std::to_string(-resultcode) + " = " + std::to_string(intInfo));
+}
+

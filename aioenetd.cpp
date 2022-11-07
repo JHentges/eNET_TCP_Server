@@ -201,7 +201,12 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include "apcilib.h"
 #include "adc.h"
 #include "config.h"
-
+#include "DataItems/ADC_.h"
+#include "DataItems/BRD_.h"
+#include "DataItems/CFG_.h"
+#include "DataItems/DAC_.h"
+#include "DataItems/REG_.h"
+#include "DataItems/TDataItem.h"
 #define VersionString "0.2.4"
 
 TConfig Config;

@@ -1,6 +1,8 @@
 //------------------- Configuration Files -------------
 #include <fcntl.h>
 #include <unistd.h>
+#include <fstream>
+#include <iostream>
 
 #include "eNET-types.h"
 #include "logging.h"
@@ -11,31 +13,48 @@ int WriteConfigSetting(std::string key, std::string value, std::string file ){
 	// validate key, value, and filename are valid/safe to use
 	// if file == "config.current" then key must already exist
 	// ConfigWrite(file, key, value);
-	std::string filename = CONFIG_PATH+file+"/" + key;
-	auto f = open(filename.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC | O_DIRECT | O_SYNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-	int result = write(f, value.c_str(), strlen(value.c_str()));
-	close(f);
+	std::string filename = CONFIG_PATH + file + "/" + key + ".conf";
+	auto f = open(filename.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC | O_SYNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	int result = -1;
+	if (f < 0)
+	{
+		result = errno;
+		Error("failed open() on " + filename + " code: " + std::to_string(result));
+		perror("open() failed");
+	}
+	else
+	{
+		result = write(f, value.c_str(), strlen(value.c_str()));
+		if (result < 0)
+		{
+			Error("failed open() on " + filename + " code: " + std::to_string(errno));
+			perror("WriteConfigSetting() open() failed");
+		}	close(f);
+	}
 
 	return result;
 };
 
 int ReadConfigSetting(std::string key, std::string &value, std::string file )
 {
-	std::string filename = CONFIG_PATH+file+"/" + key;
+	std::string filename = CONFIG_PATH + file + "/" + key + ".conf";
 	auto f = open(filename.c_str(), O_RDONLY | O_CLOEXEC | O_SYNC);
-	if (f<0)
+	int result = -1;
+	if (f < 0)
 	{
-		Error("ReadConfigSetting() failed to open config file "+filename+", status "+std::to_string(errno));
+		result = errno;
+		Error("failed to open() on " + filename + ", code " + std::to_string(errno));
 		perror("ReadConfigSetting() file open failed ");
+		return result;
 	}
 	__u8 buf[65536];
-	int result = read(f, buf, 256);
+	result = read(f, buf, 256);
 	if (result < 0)
 	{
 		Error("ReadConfigSetting() "+filename+" failed, result="+std::to_string(result)+", status "+std::to_string(errno));
 		perror("ReadConfigSetting() failed ");
 	}
-	Log("Config "+file+key+value+"="+std::string((char*)buf));
+	Log("Config " + file + key + value + "=" + std::string((char *)buf));
 	value = std::string((char *)buf);
 	return result;
 }
@@ -75,6 +94,13 @@ void LoadConfig()
 	if (0 > ReadConfigU32("DAC_RangeCh3", Config.dacRanges[3])) {
 		Error("Failed to read DAC_RangeCh3 Config");
 		perror("Failed to read DAC_RangeCh3 Config");
+	}
+	{
+	// read /etc/hostname into Config.Hostname
+		std::ifstream in("/etc/hostname");
+		in >> Config.Hostname;
+		in.close();
+		Log("Hostname:"+Config.Hostname);
 	}
 }
 

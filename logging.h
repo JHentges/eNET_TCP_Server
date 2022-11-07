@@ -9,9 +9,9 @@
 #include "eNET-types.h"
 /* Logging Stuff */
 
-//#define LOG_DISABLE_TRACE
+#define LOG_DISABLE_TRACE
 // #define LOG_DISABLE_INFO
-//#define LOG_DISABLE_DEBUG
+#define LOG_DISABLE_DEBUG
 // #define LOG_DISABLE_ERROR
 
 #include <experimental/source_location>

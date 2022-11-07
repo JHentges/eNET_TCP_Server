@@ -4,6 +4,8 @@
 */
 
 #include <linux/types.h>
+// TError (__u32) is intended to be replaced buy a class someday
+typedef __u32 TError;
 
 #include "eNET-types.h"
 
@@ -29,8 +31,6 @@
 #define ERR_ADC_BUSY -14
 #define ERR_ADC_FATAL -15
 
-// TError (__u32) is intended to be replaced buy a class someday
-typedef __u32 TError;
 
 extern const char *err_msg[];
 
