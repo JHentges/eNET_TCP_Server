@@ -4,9 +4,6 @@
 #include "../TError.h"
 
 
-#pragma region utility functions / templates < >
-
-
 int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 
 #define printBytes(dest, intro, buf, crlf)                                                       \
@@ -17,10 +14,11 @@ int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 		if (crlf)                                                                                \
 			dest << std::endl;                                                                        \
 	}
+	
 // return register width for given offset as defined for eNET-AIO registers
 // returns 0 if offset is invalid
 int widthFromOffset(int ofs);
-#pragma endregion utility functions and templates
+
 
 // utility template to turn class into (base-class)-pointer-to-instance-on-heap, so derived class gets called
 template <class X> std::unique_ptr<TDataItem> construct(TBytes FromBytes) { return std::unique_ptr<TDataItem>(new X(FromBytes)); }

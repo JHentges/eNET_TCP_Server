@@ -12,6 +12,7 @@
 extern int apci;
 
 #define DIdNYI(d)	{d, 0, 0, 0, construct<TDataItemNYI>, #d " (NYI)"}
+
 // DId Enum, minLen,tarLen,maxLen,class-constructor,human-readable-doc
 TDIdListEntry const DIdList[] = {
 	{INVALID, 0, 0, 0, construct<TDataItem>, "Invalid DId"},
@@ -138,6 +139,16 @@ TDIdListEntry const DIdList[] = {
 	//		perhaps make a TDataItem derivative that is hard-coded NYI
 };
 
+// crap function returns 8 or 32 for valid offsets into eNET-AIO's register map, or 0 for invalid
+// specific to eNET-AIO register map
+int widthFromOffset(int ofs)
+{
+	if (ofs < 0x18)
+		return 8;
+	else if ((ofs <= 0xFC) && (ofs % 4 == 0))
+		return 32;
+    return 0;
+}
 
 
 #pragma region TDataItem implementation
