@@ -1,81 +1,65 @@
 #include "TDataItem.h"
-//#include "../eNET-types.h"
-//#include "../logging.h"
 #include "BRD_.h"
 #include "../apcilib.h"
 #include "../eNET-AIO16-16F.h"
 
 extern int apci;
 
-TBytes TBRD_FpgaID::calcPayload(bool bAsReply)
-{
+std::string TBRD_FpgaID::AsString(bool bAsReply){
+	if (bAsReply)
+		return "BRD_FpgaID() → " + to_hex<__u32>(this->fpgaID);
+	else
+		return "BRD_FpgaID()";
+}
+TBRD_FpgaID &TBRD_FpgaID::Go() {
+	apci_read32(apci, 1, BAR_REGISTER, ofsFpgaID, &this->fpgaID);
+	return *this;
+}
+TBytes TBRD_FpgaID::calcPayload(bool bAsReply) {
 	TBytes bytes;
 	if (bAsReply)
 		stuff<__u32>(bytes, this->fpgaID);
 	return bytes;
 }
 
-TBRD_FpgaID &TBRD_FpgaID::Go()
-{
-	apci_read32(apci, 1, BAR_REGISTER, ofsFpgaID, &this->fpgaID);
+
+std::string TBRD_DeviceID::AsString(bool bAsReply) {
+	if (bAsReply)
+		return "BRD_DeviceID() → " + to_hex<__u16>(this->deviceID);
+	else
+		return "BRD_DeviceID()";
+}
+TBRD_DeviceID &TBRD_DeviceID::Go() {
+	__u32 value;
+	apci_read32(apci, 1, BAR_REGISTER, ofsDeviceID, &value);
+	this->deviceID = value & 0xFFFF;
 	return *this;
 }
-
-std::string TBRD_FpgaID::AsString(bool bAsReply)
-{
-	if (bAsReply)
-		return "BRD_FpgaID() → " + to_hex<__u32>(this->fpgaID);
-	else
-		return "BRD_FpgaID()";
-}
-
-
-TBytes TBRD_DeviceID::calcPayload(bool bAsReply)
-{
+TBytes TBRD_DeviceID::calcPayload(bool bAsReply) {
 	TBytes bytes;
 	if (bAsReply)
 		stuff(bytes, this->deviceID);
 	return bytes;
 }
 
-TBRD_DeviceID &TBRD_DeviceID::Go()
-{
-	__u32 value;
-	apci_read32(apci, 1, BAR_REGISTER, ofsDeviceID, &value);
-	this->deviceID = value & 0xFFFF;
-	return *this;
-}
 
-std::string TBRD_DeviceID::AsString(bool bAsReply)
-{
+std::string TBRD_Features::AsString(bool bAsReply) {
 	if (bAsReply)
-		return "BRD_DeviceID() → " + to_hex<__u16>(this->deviceID);
+		return "BRD_Features() → " + to_hex<__u16>(this->features);
 	else
-		return "BRD_DeviceID()";
+		return "BRD_Features()";
 }
-
-TBytes TBRD_Features::calcPayload(bool bAsReply)
-{
-	TBytes bytes;
-	if (bAsReply)
-		stuff(bytes, this->features);
-	return bytes;
-}
-
-TBRD_Features &TBRD_Features::Go()
-{
+TBRD_Features &TBRD_Features::Go() {
 	__u32 value;
 	apci_read32(apci, 1, BAR_REGISTER, ofsFeatures, &value);
 	this->features = value & 0xFF;
 	return *this;
 }
-
-std::string TBRD_Features::AsString(bool bAsReply)
-{
+TBytes TBRD_Features::calcPayload(bool bAsReply){
+	TBytes bytes;
 	if (bAsReply)
-		return "BRD_Features() → " + to_hex<__u16>(this->features);
-	else
-		return "BRD_Features()";
+		stuff(bytes, this->features);
+	return bytes;
 }
 
 #pragma endregion

@@ -227,9 +227,9 @@ typedef struct TActionQueueItemClass
 } TActionQueueItem;
 
 typedef SafeQueue<TActionQueueItem*> TActionQueue;
-SafeQueue<pthread_t> ReceiverThreadQueue;
+//SafeQueue<pthread_t> ReceiverThreadQueue;
 TActionQueue ActionQueue;
-TActionQueue ReplyQueue; // J2H: consider one per ReceiveThread...(i.e., make one ReplyThread per ReceiveThread, each with an associated queue)
+//TActionQueue ReplyQueue; // J2H: consider one per ReceiveThread...(i.e., make one ReplyThread per ReceiveThread, each with an associated queue)
 
 static void sig_handler(int sig);
 void LoadConfig();
@@ -604,7 +604,7 @@ void HandleNewControlClients(int ControlListenSocket, int addrSize, std::vector<
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
 	pthread_create(&receive_thread, NULL, &threadReceiver, (void *) new_socket); // spawn Control Read thread here, pass in new_socket
 #pragma GCC diagnostic pop
-	ReceiverThreadQueue.enqueue(receive_thread);
+	// ReceiverThreadQueue.enqueue(receive_thread);
 }
 
 

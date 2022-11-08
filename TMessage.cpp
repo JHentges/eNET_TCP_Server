@@ -68,6 +68,20 @@ const vector<TMessageId> ValidMessageIDs{
 */
 
 
+template <typename T> std::vector<T> slicing(std::vector<T> const &v, int Start, int End)
+{
+
+	// Begin and End iterator
+	auto first = v.begin() + Start;
+	auto last = v.begin() + End + 1;
+
+	// Copy the element
+	std::vector<T> vector(first, last);
+
+	// Return the results
+	return vector;
+}
+
 
 #pragma region TMessage implementation
 
