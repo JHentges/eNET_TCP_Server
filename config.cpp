@@ -51,12 +51,14 @@ int ReadConfigSetting(std::string key, std::string &value, std::string file )
 	result = read(f, buf, 256);
 	if (result < 0)
 	{
-		Error("ReadConfigSetting() "+filename+" failed, result="+std::to_string(result)+", status "+std::to_string(errno));
+		result = errno;
+		Error("ReadConfigSetting() " + filename + " failed, result=" + std::to_string(result) + ", status " + std::to_string(errno));
 		perror("ReadConfigSetting() failed ");
+		return result;
 	}
-	int l = strlen((char *) buf)-1;
-	if(buf[l]=0x10)
-		buf[l] = 0;
+	int L = strlen((char *) buf)-1;
+	if(buf[L] = 0x10)
+		buf[L] = 0;
 
 	value = std::string((char *)buf);
 	return result;
@@ -66,7 +68,8 @@ int ReadConfigU8(std::string key, __u8 &value, std::string file)
 {
 	std::string v;
 	int result = ReadConfigSetting(key, v);
-	value = std::stoi(v, nullptr, 16);
+	if (result == 0)
+		value = std::stoi(v, nullptr, 16);
 	return result;
 }
 
@@ -74,7 +77,8 @@ int ReadConfigU32(std::string key, __u32 &value, std::string file)
 {
 	std::string v;
 	int result = ReadConfigSetting(key, v);
-	value = std::stoi(v, nullptr, 16);
+	if (result == 0)
+		value = std::stoi(v, nullptr, 16);
 	return result;
 }
 
