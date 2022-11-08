@@ -1,9 +1,10 @@
 #include "TDataItem.h"
 #include "BRD_.h"
-#include "../apcilib.h"
+//#include "../apcilib.h"
+#include "../apci.h"
 #include "../eNET-AIO16-16F.h"
 
-extern int apci;
+//extern int apci;
 
 std::string TBRD_FpgaID::AsString(bool bAsReply){
 	if (bAsReply)
@@ -12,7 +13,8 @@ std::string TBRD_FpgaID::AsString(bool bAsReply){
 		return "BRD_FpgaID()";
 }
 TBRD_FpgaID &TBRD_FpgaID::Go() {
-	apci_read32(apci, 1, BAR_REGISTER, ofsFpgaID, &this->fpgaID);
+	//apci_read32(apci, 1, BAR_REGISTER, ofsFpgaID, &this->fpgaID);
+	this->fpgaID = in(ofsFpgaID);
 	return *this;
 }
 TBytes TBRD_FpgaID::calcPayload(bool bAsReply) {
@@ -30,9 +32,9 @@ std::string TBRD_DeviceID::AsString(bool bAsReply) {
 		return "BRD_DeviceID()";
 }
 TBRD_DeviceID &TBRD_DeviceID::Go() {
-	__u32 value;
-	apci_read32(apci, 1, BAR_REGISTER, ofsDeviceID, &value);
-	this->deviceID = value & 0xFFFF;
+	//__u32 value;
+	//apci_read32(apci, 1, BAR_REGISTER, ofsDeviceID, &value);
+	this->deviceID = in(ofsDeviceID) & 0xFFFF;
 	return *this;
 }
 TBytes TBRD_DeviceID::calcPayload(bool bAsReply) {
@@ -50,9 +52,9 @@ std::string TBRD_Features::AsString(bool bAsReply) {
 		return "BRD_Features()";
 }
 TBRD_Features &TBRD_Features::Go() {
-	__u32 value;
-	apci_read32(apci, 1, BAR_REGISTER, ofsFeatures, &value);
-	this->features = value & 0xFF;
+	// __u32 value;
+	// apci_read32(apci, 1, BAR_REGISTER, ofsFeatures, &value);
+	this->features = in(ofsFeatures) & 0xFF;
 	return *this;
 }
 TBytes TBRD_Features::calcPayload(bool bAsReply){

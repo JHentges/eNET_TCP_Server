@@ -1,50 +1,52 @@
 #include "REG_.h"
 
-#include "../apcilib.h"
+// #include "../apcilib.h"
+#include "../apci.h"
 #include "../eNET-types.h"
 #include "../eNET-AIO16-16F.h"
 #include "../logging.h"
 #include "TDataItem.h"
 
-extern int apci;
+// extern int apci;
 
 TREG_Read1 &TREG_Read1::Go()
 {
 	this->Value = 0;
-	switch (this->width)
-	{
-	case 8:
-		this->resultCode = apci_read8(apci, 0, BAR_REGISTER, this->offset, (__u8*)&this->Value);
-		Trace("apci_read8(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u8)this->Value));
-		break;
-	case 32:
-		this->resultCode = apci_read32(apci, 0, BAR_REGISTER, this->offset, &this->Value);
-		Trace("apci_read32(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u32)this->Value));
-		break;
-	}
+	this->Value = in(offset);
+	// switch (this->width)
+	// {
+	// case 8:
+	// 	//this->resultCode = apci_read8(apci, 0, BAR_REGISTER, this->offset, (__u8*)&this->Value);
+	// 	Trace("apci_read8(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u8)this->Value));
+	// 	break;
+	// case 32:
+	// 	this->resultCode = apci_read32(apci, 0, BAR_REGISTER, this->offset, &this->Value);
+	// 	Trace("apci_read32(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u32)this->Value));
+	// 	break;
+	// }
 	return *this;
 }
 
-
-
 std::shared_ptr<void> TREG_Read1::getResultValue()
 {
-	Trace("returning " + (this->width==8?to_hex<__u8>((__u8)this->Value):to_hex<__u32>((__u32)this->Value)));
+	Trace("returning " + (this->width == 8 ? to_hex<__u8>((__u8)this->Value) : to_hex<__u32>((__u32)this->Value)));
 	return this->width == 8
-					? (std::shared_ptr<void>) std::shared_ptr<__u8>(new __u8(this->Value))
-					: (std::shared_ptr<void>) std::shared_ptr<__u32>(new __u32(this->Value));
+			   ? (std::shared_ptr<void>)std::shared_ptr<__u8>(new __u8(this->Value))
+			   : (std::shared_ptr<void>)std::shared_ptr<__u32>(new __u32(this->Value));
 }
 
 TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 {
 	TError result = ERR_SUCCESS;
-	if (Data.size() != 1){
+	if (Data.size() != 1)
+	{
 		Error(err_msg[-ERR_DId_BAD_PARAM]);
 		return ERR_DId_BAD_PARAM;
 	}
 	int offset = Data[0];
 	int w = widthFromOffset(offset);
-	if (w != 0){
+	if (w != 0)
+	{
 		Error(err_msg[-ERR_DId_BAD_OFFSET]);
 		return ERR_DId_BAD_OFFSET;
 	}
@@ -52,11 +54,9 @@ TError TREG_Read1::validateDataItemPayload(DataItemIds DataItemID, TBytes Data)
 	return result;
 };
 
-
-
 TREG_Read1::TREG_Read1(DataItemIds DId, int ofs)
 {
-	Trace("ENTER. DId: "+to_hex<TDataId>(DId)+", offset: "+to_hex<__u8>(ofs));
+	Trace("ENTER. DId: " + to_hex<TDataId>(DId) + ", offset: " + to_hex<__u8>(ofs));
 	this->setDId(REG_Read1);
 	this->setOffset(ofs);
 }
@@ -81,7 +81,8 @@ TREG_Read1::TREG_Read1(TBytes data)
 TREG_Read1 &TREG_Read1::setOffset(int ofs)
 {
 	int w = widthFromOffset(ofs);
-	if (w == 0){
+	if (w == 0)
+	{
 		Error("Invalid offset");
 		throw std::logic_error("Invalid offset passed to TREG_Read1::setOffset");
 	}
@@ -95,7 +96,8 @@ TBytes TREG_Read1::calcPayload(bool bAsReply)
 	TBytes bytes;
 	stuff<__u8>(bytes, this->offset);
 
-	if (bAsReply){
+	if (bAsReply)
+	{
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
 		stuff(bytes, v);
@@ -115,7 +117,8 @@ std::string TREG_Read1::AsString(bool bAsReply)
 		dest << " → ";
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
-		if (this->width == 8){
+		if (this->width == 8)
+		{
 			dest << std::hex << std::setw(2) << (v & 0x000000FF);
 		}
 		else
@@ -136,18 +139,20 @@ TREG_Writes::~TREG_Writes()
 }
 
 // TODO: write WaitUntilBitsMatch(__u8 offset, __u32 bmMask, __u32 bmPattern);
-int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask)  // TODO: move into utility source file
+int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) // TODO: move into utility source file
 {
 	__u32 value = 0;
 	int attempt = 0;
-	do {
-		int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
-		Trace("SPI Busy Bit at " + std::string(to_hex<__u8>(offset)) + " is " +( (value & bitMask) ? "1" : "0"));
-		if (status < 0)
-			return -errno;
+	do
+	{
+		// int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
+		value = in(offset);
+		Trace("SPI Busy Bit at " + std::string(to_hex<__u8>(offset)) + " is " + ((value & bitMask) ? "1" : "0"));
+		// if (status < 0)
+		// 	return -errno;
 		if (++attempt > 100)
 		{
-			Error("Timeout waiting for SPI to be not busy, at offset: "+to_hex<__u8>(offset));
+			Error("Timeout waiting for SPI to be not busy, at offset: " + to_hex<__u8>(offset));
 			return -ETIMEDOUT; // TODO: swap "attempt" with "timeout" RTC if benchmark proves RTC is not too slow
 		}
 	} while ((value & bitMask));
@@ -183,76 +188,31 @@ TREG_Writes &TREG_Writes::Go()
 
 	this->resultCode = 0;
 	for (auto action : this->Writes)
-		switch (action.width)
+	{
+		// DAC (at offset +30) and DIO (at offsets +3C → +44) are SPI based and must not write while the respective SPI bus is busy
+		switch (action.offset)
 		{
-		case 8:
-			this->resultCode |= apci_write8(apci, 0, BAR_REGISTER, action.offset, (__u8)(action.value & 0x000000FF));
-			Trace("apci_write8(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u8>((action.value & 0xFF)));
+		case ofsDac: // DAC SPI busy handling
+			this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
 			break;
-		case 32:
-			// DAC (at offset +30) and DIO (at offsets +3C → +44) are SPI based and must not write while the respective SPI bus is busy
-			switch(action.offset)
-			{
-				case ofsDac: // DAC SPI busy handling
-					// do{
-					// 	diffTime = nextAllowedTimeDacSpi - now();
-					// } while (diffTime > 0);
-					//Log("calling wait for spi on DAC register");
-					this->resultCode = WaitUntilRegisterBitIsLow(ofsDacSpiBusy, bmDacSpiBusy);
-					//Trace("DAC SPI Busy Wait returned " + to_string(this->resultCode));
-					//usleep(160);
-					break;
-				case ofsDioDirections:
-				case ofsDioOutputs:
-				case ofsDioInputs: // DIO SPI busy handling
-					// do{
-					// 	diffTime = nextAllowedTimeDioSpi - now();
-					// 	printf("delta %lld\n", diffTime);
-					// } while (diffTime > 0);
-					//Log("calling wait for spi on DIO register");
-					this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
-					//Trace("DIO SPI Busy Wait returned "+to_string(this->resultCode));
-					//usleep(160);
-					break;
-				default:
-					break;
-			}
-
-			if (0 == this->resultCode)
-			{
-				this->resultCode |= apci_write32(apci, 0, BAR_REGISTER, action.offset, action.value);
-				switch(action.offset)
-			{
-				case ofsDac: // DAC SPI busy handling
-					nextAllowedTimeDacSpi = now() + SPI_DELAY_DAC;
-					break;
-				case ofsDioDirections:
-				case ofsDioOutputs:
-				case ofsDioInputs: // DIO SPI busy handling
-					nextAllowedTimeDioSpi = now() + SPI_DELAY_DIO;
-					break;
-				default:
-					break;
-			}
-				if (0 == this->resultCode)
-				{
-					Trace("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
-				}
-				else
-				{
-					Error("apci_write32(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value) + " returned "+std::to_string(this->resultCode));
-					return *this;
-				}
-			}
-			else // TODO: FIX: should change TREG_Writes' REG_Write struct to include a resultCode and this else to set both the individual action.resultCode and the TREG_Writes.resultCode
-			{
-				Error("WaitUntilRegisterBitIsLow() returned "+std::to_string(this->resultCode));
-				return *this;
-			}
+		case ofsDioDirections:
+		case ofsDioOutputs:
+		case ofsDioInputs: // DIO SPI busy handling
+			this->resultCode = WaitUntilRegisterBitIsLow(ofsDioSpiBusy, bmDioSpiBusy);
+			break;
+		default:
 			break;
 		}
+		out(action.offset, action.value);
+		if (action.width == 8){
+			Trace("out(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u8>(action.value));
+		}
+		else {Trace("out(" + to_hex<__u8>(action.offset) + ") → " + to_hex<__u32>(action.value));
+		}
+	}
 	return *this;
 }
+
 std::string TREG_Writes::AsString(bool bAsReply)
 {
 	std::stringstream dest;
@@ -296,7 +256,7 @@ TREG_Write1::TREG_Write1(TBytes buf)
 TBytes TREG_Write1::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	if (this->Writes.size() > 0 )
+	if (this->Writes.size() > 0)
 		stuff<__u8>(bytes, this->Writes[0].offset);
 	else
 		Error("ERROR: nothing in Write[] queue");

@@ -25,12 +25,13 @@
 #include <fcntl.h>
 #include <mutex>
 
-//#include "safe_queue.h"
+
 #include "logging.h"
 #include "TMessage.h"
 #include "TError.h"
 #include "eNET-AIO16-16F.h"
 #include "apcilib.h"
+#include "apci.h"
 #include "adc.h"
 
 static uint32_t ring_buffer[RING_BUFFER_SLOTS][SAMPLES_PER_TRANSFER];
@@ -171,7 +172,8 @@ void *worker_main(void *arg)
 		Error(e.what());
 	}
 	Trace("Setting AdcStreamingConnection to idle");
-	apci_write8(apci, 1, BAR_REGISTER, 0x12, 0); // turn off ADC start modes
+	// apci_write8(apci, 1, BAR_REGISTER, 0x12, 0); // turn off ADC start modes
+	out(0x12, 0);
 	// pthread_cancel(logger_thread);
 	pthread_join(logger_thread, NULL);
 	pthread_mutex_destroy(&mutex);

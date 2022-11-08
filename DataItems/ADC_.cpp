@@ -1,5 +1,6 @@
 #include "ADC_.h"
 #include "../apcilib.h"
+#include "../apci.h"
 #include "../logging.h"
 #include "../eNET-AIO16-16F.h"
 #include "../adc.h"
@@ -23,7 +24,8 @@ TBytes TADC_BaseClock::calcPayload(bool bAsReply)
 TADC_BaseClock &TADC_BaseClock::Go()
 {
 	Trace("ADC_BaseClock Go()");
-	apci_read32(apci, 0, BAR_REGISTER, ofsAdcBaseClock, &this->baseClock);
+	// apci_read32(apci, 0, BAR_REGISTER, ofsAdcBaseClock, &this->baseClock);
+	this->baseClock = in(ofsAdcBaseClock);
 	return *this;
 }
 
