@@ -54,7 +54,10 @@ int ReadConfigSetting(std::string key, std::string &value, std::string file )
 		Error("ReadConfigSetting() "+filename+" failed, result="+std::to_string(result)+", status "+std::to_string(errno));
 		perror("ReadConfigSetting() failed ");
 	}
-	Log("Config " + file + key + value + "=" + std::string((char *)buf));
+	int l = strlen((char *) buf)-1;
+	if(buf[l]=0x10)
+		buf[l] = 0;
+
 	value = std::string((char *)buf);
 	return result;
 }
@@ -100,7 +103,7 @@ void LoadConfig()
 		std::ifstream in("/etc/hostname");
 		in >> Config.Hostname;
 		in.close();
-		Log("Hostname:"+Config.Hostname);
+		Log("Hostname == " + Config.Hostname);
 	}
 }
 

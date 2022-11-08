@@ -536,7 +536,7 @@ bool GotMessage(char theBuffer[], int bytesRead, TMessage &parsedMessage)
 		Error("TMessage::fromBytes(buf) returned " + std::to_string(result) + err_msg[-result]);
 		return false;
 	}
-	Log("\nReceived on Control connection:\n          " + parsedMessage.AsString());
+	Log("Received on Control connection:\n          " + parsedMessage.AsString());
 	return true;
 }
 
@@ -544,7 +544,7 @@ void *threadReceiver(void *arg) // J2H: In progress
 {
 	int controlSocket = (long long )arg;
 
-	Log("\nNew Control connection thread, socket fd is: " + std::to_string(controlSocket));
+	Log("New Control connection thread, socket fd is: " + std::to_string(controlSocket));
 	SendControlHello(controlSocket);
 
 	ssize_t bytesRead = 0;
@@ -599,7 +599,7 @@ void HandleNewControlClients(int ControlListenSocket, int addrSize, std::vector<
 		exit(EXIT_FAILURE);
 	}
 	pthread_t receive_thread;
-	Log("\nNew Control connection, socket fd is: " + std::to_string(new_socket));
+	Log("New Control connection, socket fd is: " + std::to_string(new_socket));
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
 	pthread_create(&receive_thread, NULL, &threadReceiver, (void *) new_socket); // spawn Control Read thread here, pass in new_socket

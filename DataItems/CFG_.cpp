@@ -18,8 +18,7 @@ TCFG_Hostname::TCFG_Hostname(TBytes buf)
 TBytes TCFG_Hostname::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	for (auto c : this->hostname)
-		bytes.push_back(c);
+	stuff(bytes, this->hostname);
 	return bytes;
 }
 

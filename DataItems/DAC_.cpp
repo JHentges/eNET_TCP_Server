@@ -37,11 +37,8 @@ TDAC_Range1::TDAC_Range1(TBytes bytes)
 TBytes TDAC_Range1::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	bytes.push_back(this->dacChannel);
-	bytes.push_back(this->dacRange & 0xFF);
-	bytes.push_back((this->dacRange >> 8) & 0xFF);
-	bytes.push_back((this->dacRange >> 16) & 0xFF);
-	bytes.push_back((this->dacRange >> 24) & 0xFF);
+	stuff<__u8>(bytes, this->dacChannel);
+	stuff<__u32>(bytes, this->dacRange);
 	return bytes;
 };
 

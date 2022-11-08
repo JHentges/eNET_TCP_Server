@@ -14,10 +14,37 @@ int validateDataItemPayload(DataItemIds DataItemID, TBytes Data);
 		if (crlf)                                                                                \
 			dest << std::endl;                                                                        \
 	}
-	
+
 // return register width for given offset as defined for eNET-AIO registers
 // returns 0 if offset is invalid
 int widthFromOffset(int ofs);
+
+template <typename T>
+void stuff(TBytes & buf, const T v)
+{
+	auto value = v;
+	for (int i = 0; i < sizeof(T); i++)
+	{
+		buf.push_back(value & 0xFF);
+		value >>= 8;
+	}
+}
+template <typename T=std::string>
+void stuff(TBytes & buf, const std::string v)
+{
+	for (char c : v)
+		buf.push_back(c);
+}
+
+// void stuff32(TBytes & buf, const __u32 v)
+// {
+// 	auto value = v;
+// 	for (int i = 0; i < sizeof(value); i++)
+// 	{
+// 		buf.push_back(value & 0x000000FF);
+// 		value >>= 8;
+// 	}
+// }
 
 
 // utility template to turn class into (base-class)-pointer-to-instance-on-heap, so derived class gets called

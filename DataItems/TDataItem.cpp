@@ -150,7 +150,6 @@ int widthFromOffset(int ofs)
     return 0;
 }
 
-
 #pragma region TDataItem implementation
 /*	TDataItem
 	Base Class, provides basics for handling TDataItem payloads.
@@ -224,21 +223,12 @@ TDataItemLength TDataItem::getMaxLength(DataItemIds DId)
 
 void TDataItem::pushDId(TBytes & buf)
 {
-	TDataId DId = this->Id;
-	for (int i = 0; i < sizeof(DId); i++)
-	{
-		buf.push_back(DId & 0x000000FF);
-		DId >>= 8;
-	}
+	stuff<TDataId>(buf, this->Id);
 }
 
 void TDataItem::pushLen(TBytes & buf, TDataItemLength len)
 {
-	for (int i = 0; i < sizeof(len); i++)
-	{
-		buf.push_back(len & 0x000000FF);
-		len >>= 8;
-	}
+	stuff<TDataItemLength>(buf, len);
 }
 
 int TDataItem::isValidDataItemID(DataItemIds DataItemID)
@@ -295,7 +285,6 @@ PTDataItem TDataItem::fromBytes(TBytes msg, TError &result)
 
 	TDataItemHeader *head = (TDataItemHeader *)msg.data();
 	GUARD(isValidDataItemID(head->DId), ERR_DId_INVALID, head->DId);
-	// Trace("Got DId: " + to_hex<TDataId>(head->DId));
 
 	PTDataItem anItem;
 	TDataItemLength DataSize = head->dataLength; // MessageLength

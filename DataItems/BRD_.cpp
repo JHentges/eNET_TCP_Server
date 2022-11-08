@@ -10,15 +10,8 @@ extern int apci;
 TBytes TBRD_FpgaID::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	auto id = this->fpgaID;
 	if (bAsReply)
-	{
-		for (int i = 0; i < sizeof(id); i++)
-		{
-			bytes.push_back(id & 0x000000FF);
-			id >>= 8;
-		}
-	}
+		stuff<__u32>(bytes, this->fpgaID);
 	return bytes;
 }
 
@@ -40,15 +33,8 @@ std::string TBRD_FpgaID::AsString(bool bAsReply)
 TBytes TBRD_DeviceID::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	auto id = this->deviceID;
 	if (bAsReply)
-	{
-		for (int i = 0; i < sizeof(id); i++)
-		{
-			bytes.push_back(id & 0x000000FF);
-			id >>= 8;
-		}
-	}
+		stuff(bytes, this->deviceID);
 	return bytes;
 }
 
@@ -68,20 +54,11 @@ std::string TBRD_DeviceID::AsString(bool bAsReply)
 		return "BRD_DeviceID()";
 }
 
-
-
 TBytes TBRD_Features::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	auto id = this->features;
 	if (bAsReply)
-	{
-		for (int i = 0; i < sizeof(id); i++)
-		{
-			bytes.push_back(id & 0x000000FF);
-			id >>= 8;
-		}
-	}
+		stuff(bytes, this->features);
 	return bytes;
 }
 

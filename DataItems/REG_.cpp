@@ -93,16 +93,12 @@ TREG_Read1 &TREG_Read1::setOffset(int ofs)
 TBytes TREG_Read1::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	bytes.push_back(this->offset);
+	stuff<__u8>(bytes, this->offset);
 
 	if (bAsReply){
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
-		for (int i=0; i<this->width/8; i++)
-		{
-			bytes.push_back(v & 0x000000FF);
-			v >>= 8;
-		}
+		stuff(bytes, v);
 	}
 
 	Trace("TREG_Read1::calcPayload built: ", bytes);
@@ -301,11 +297,11 @@ TBytes TREG_Write1::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
 	if (this->Writes.size() > 0 )
-		bytes.push_back(this->Writes[0].offset);
+		stuff<__u8>(bytes, this->Writes[0].offset);
 	else
 		Error("ERROR: nothing in Write[] queue");
 
-			__u32 v = this->Writes[0].value;
+	__u32 v = this->Writes[0].value;
 	for (int i = 0; i < this->Writes[0].width / 8; i++)
 	{
 		bytes.push_back(v & 0x000000FF);
