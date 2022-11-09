@@ -198,7 +198,6 @@ from discord code-review conversation with Daria; these do not belong in this so
 
 #include "logging.h"
 #include "TMessage.h"
-#include "apcilib.h"
 #include "adc.h"
 #include "config.h"
 #include "DataItems/ADC_.h"

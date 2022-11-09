@@ -6,7 +6,6 @@
 #include "CFG_.h"
 #include "DAC_.h"
 #include "REG_.h"
-#include "../apcilib.h"
 #include "../eNET-AIO16-16F.h"
 
 extern int apci;

@@ -1,5 +1,4 @@
 #include "ADC_.h"
-#include "../apcilib.h"
 #include "../apci.h"
 #include "../logging.h"
 #include "../eNET-AIO16-16F.h"
@@ -24,7 +23,6 @@ TBytes TADC_BaseClock::calcPayload(bool bAsReply)
 TADC_BaseClock &TADC_BaseClock::Go()
 {
 	Trace("ADC_BaseClock Go()");
-	// apci_read32(apci, 0, BAR_REGISTER, ofsAdcBaseClock, &this->baseClock);
 	this->baseClock = in(ofsAdcBaseClock);
 	return *this;
 }
@@ -74,10 +72,10 @@ TBytes TADC_StreamStart::calcPayload(bool bAsReply)
 TADC_StreamStart &TADC_StreamStart::Go()
 {
 	Trace("ADC_StreamStart::Go(), ADC Streaming Data will be sent on ConnectionID: "+std::to_string(AdcStreamingConnection));
-	auto status = apci_dma_transfer_size(apci, 1, RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
+	auto status = apciDmaTransferSize(RING_BUFFER_SLOTS, BYTES_PER_TRANSFER);
 	if (status)
 	{
-		Error("Error setting apci_dma_transfer_size: "+std::to_string(status));
+		Error("Error setting apciDmaTransferSize: "+std::to_string(status));
 		throw std::logic_error(err_msg[-status]);
 	}
 
@@ -86,7 +84,7 @@ TADC_StreamStart &TADC_StreamStart::Go()
 	{
 		AdcWorkerThreadID = pthread_create(&worker_thread, NULL, &worker_main, &AdcStreamingConnection);
 	}
-	apci_start_dma(apci);
+	apciDmaStart();
 	return *this;
 };
 
@@ -118,7 +116,7 @@ TADC_StreamStop &TADC_StreamStop::Go()
 {
 	Trace("ADC_StreamStop::Go(): terminating ADC Streaming");
 	AdcStreamTerminate = 1;
-	apci_cancel_irq(apci, 1);
+	apciCancelWaitForIRQ();
 	AdcStreamingConnection = -1;
 	AdcWorkerThreadID = -1;
 	// pthread_cancel(worker_thread);

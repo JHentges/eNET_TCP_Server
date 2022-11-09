@@ -1,6 +1,5 @@
 #include "REG_.h"
 
-// #include "../apcilib.h"
 #include "../apci.h"
 #include "../eNET-types.h"
 #include "../eNET-AIO16-16F.h"
@@ -13,17 +12,6 @@ TREG_Read1 &TREG_Read1::Go()
 {
 	this->Value = 0;
 	this->Value = in(offset);
-	// switch (this->width)
-	// {
-	// case 8:
-	// 	//this->resultCode = apci_read8(apci, 0, BAR_REGISTER, this->offset, (__u8*)&this->Value);
-	// 	Trace("apci_read8(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u8)this->Value));
-	// 	break;
-	// case 32:
-	// 	this->resultCode = apci_read32(apci, 0, BAR_REGISTER, this->offset, &this->Value);
-	// 	Trace("apci_read32(" + to_hex<__u8>((__u8)this->offset) + ") → " + to_hex<__u32>((__u32)this->Value));
-	// 	break;
-	// }
 	return *this;
 }
 
@@ -145,7 +133,6 @@ int WaitUntilRegisterBitIsLow(__u8 offset, __u32 bitMask) // TODO: move into uti
 	int attempt = 0;
 	do
 	{
-		// int status = apci_read32(apci, 1, BAR_REGISTER, offset, &value);
 		value = in(offset);
 		Trace("SPI Busy Bit at " + std::string(to_hex<__u8>(offset)) + " is " + ((value & bitMask) ? "1" : "0"));
 		// if (status < 0)

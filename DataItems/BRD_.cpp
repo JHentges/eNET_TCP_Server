@@ -1,6 +1,5 @@
 #include "TDataItem.h"
 #include "BRD_.h"
-//#include "../apcilib.h"
 #include "../apci.h"
 #include "../eNET-AIO16-16F.h"
 
@@ -13,7 +12,6 @@ std::string TBRD_FpgaID::AsString(bool bAsReply){
 		return "BRD_FpgaID()";
 }
 TBRD_FpgaID &TBRD_FpgaID::Go() {
-	//apci_read32(apci, 1, BAR_REGISTER, ofsFpgaID, &this->fpgaID);
 	this->fpgaID = in(ofsFpgaID);
 	return *this;
 }
@@ -32,8 +30,6 @@ std::string TBRD_DeviceID::AsString(bool bAsReply) {
 		return "BRD_DeviceID()";
 }
 TBRD_DeviceID &TBRD_DeviceID::Go() {
-	//__u32 value;
-	//apci_read32(apci, 1, BAR_REGISTER, ofsDeviceID, &value);
 	this->deviceID = in(ofsDeviceID) & 0xFFFF;
 	return *this;
 }
@@ -52,8 +48,6 @@ std::string TBRD_Features::AsString(bool bAsReply) {
 		return "BRD_Features()";
 }
 TBRD_Features &TBRD_Features::Go() {
-	// __u32 value;
-	// apci_read32(apci, 1, BAR_REGISTER, ofsFeatures, &value);
 	this->features = in(ofsFeatures) & 0xFF;
 	return *this;
 }

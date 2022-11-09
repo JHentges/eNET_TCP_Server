@@ -27,7 +27,6 @@ using namespace std;
 #include "TMessage.h"
 
 #include "DataItems/TDataItem.h"
-#include "apcilib.h"
 #include "eNET-AIO16-16F.h"
 #include "adc.h"
 
