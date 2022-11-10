@@ -15,7 +15,7 @@ TADC_BaseClock::TADC_BaseClock(TBytes buf)
 TBytes TADC_BaseClock::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	stuff(bytes, this->baseClock);
+	stuff<__u32>(bytes, this->baseClock);
 	Trace("TADC_BaseClock::calcPayload built: ", bytes);
 	return bytes;
 };
@@ -64,7 +64,7 @@ TADC_StreamStart::TADC_StreamStart(TBytes buf)
 TBytes TADC_StreamStart::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	stuff(bytes, this->argConnectionID);
+	stuff<__u32>(bytes, this->argConnectionID);
 	Trace("TADC_StreamStart::calcPayload built: ", bytes);
 	return bytes;
 };

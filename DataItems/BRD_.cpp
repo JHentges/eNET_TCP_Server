@@ -36,7 +36,7 @@ TBRD_DeviceID &TBRD_DeviceID::Go() {
 TBytes TBRD_DeviceID::calcPayload(bool bAsReply) {
 	TBytes bytes;
 	if (bAsReply)
-		stuff(bytes, this->deviceID);
+		stuff<__u16>(bytes, this->deviceID);
 	return bytes;
 }
 
@@ -54,7 +54,7 @@ TBRD_Features &TBRD_Features::Go() {
 TBytes TBRD_Features::calcPayload(bool bAsReply){
 	TBytes bytes;
 	if (bAsReply)
-		stuff(bytes, this->features);
+		stuff<__u32>(bytes, this->features);
 	return bytes;
 }
 

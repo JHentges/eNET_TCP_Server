@@ -88,10 +88,13 @@ TBytes TREG_Read1::calcPayload(bool bAsReply)
 	{
 		auto value = this->getResultValue();
 		__u32 v = *((__u32 *)value.get());
-		stuff(bytes, v);
+		if (this->width == 8)
+			stuff<__u8>(bytes, v&0xff);
+		else
+			stuff<__u32>(bytes, v);
 	}
 
-	Trace("TREG_Read1::calcPayload built: ", bytes);
+	Log("TREG_Read1::calcPayload built: ", bytes);
 	return bytes;
 }
 
