@@ -1,5 +1,6 @@
 #pragma once
 #include "../eNET-types.h"
+#include "../config.h"
 #include "TDataItem.h"
 
 class TCFG_Hostname : public TDataItem

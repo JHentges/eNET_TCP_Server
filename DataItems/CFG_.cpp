@@ -18,7 +18,7 @@ TCFG_Hostname::TCFG_Hostname(TBytes buf)
 TBytes TCFG_Hostname::calcPayload(bool bAsReply)
 {
 	TBytes bytes;
-	stuff<std::string>(bytes, this->hostname);
+	stuff(bytes, this->hostname);
 	return bytes;
 }
 

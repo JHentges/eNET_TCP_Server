@@ -441,5 +441,3 @@ std::shared_ptr<void> TDataItem::getResultValue()
 #pragma region TDataItemNYI implementation
 // NYI (lol)
 #pragma endregion
-
-int WriteConfigSetting(std::string key, std::string value, std::string file="config.current");

@@ -15,6 +15,9 @@ Frex: replace all the #defines with an abstract base class fields, then derive o
       or whatever
 */
 
+#define maxSubmuxes 4
+#define gainGroupsPerSubmux 4
+
 #define BAR_REGISTER 1
 
 #define FIFO_SIZE 0x800  /* FIFO Almost Full IRQ Threshold value (0 < FAF <= 0xFFF */

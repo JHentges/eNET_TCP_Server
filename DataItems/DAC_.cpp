@@ -50,7 +50,7 @@ TDAC_Range1 &TDAC_Range1::Go()
 		// if (this->dacRange != Config.dacRanges[this->dacChannel])
 		{
 			// write DAC_Range config file data
-			if (0 > WriteConfigSetting("DAC_RangeCh"+std::to_string(this->dacChannel), to_hex<__u32>(this->dacRange)))
+			if (0 > WriteConfigString("DAC_RangeCh"+std::to_string(this->dacChannel), to_hex<__u32>(this->dacRange)))
 			{
 				// handle write error
 				this->dacRange = Config.dacRanges[this->dacChannel];

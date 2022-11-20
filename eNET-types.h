@@ -113,13 +113,6 @@ typedef struct TSendQueueItemClass
 	int portSend;
 } TSendQueueItem;
 
-typedef struct TConfigStruct
-{
-	__u32 dacRanges[4];
-	std::string Hostname;
-} TConfig;
-extern TConfig Config;
-
 #pragma pack(pop)
 
 // throw exception if conditional is false

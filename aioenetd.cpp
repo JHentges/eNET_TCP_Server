@@ -231,7 +231,6 @@ TActionQueue ActionQueue;
 //TActionQueue ReplyQueue; // J2H: consider one per ReceiveThread...(i.e., make one ReplyThread per ReceiveThread, each with an associated queue)
 
 static void sig_handler(int sig);
-void LoadConfig();
 void OpenDevFile();
 void Intro(int argc, char **argv);
 void HandleNewAdcClients(int Socket, int addrSize, std::vector<int> &ClientList, struct sockaddr_in &addr, fd_set &ReadFDs);
