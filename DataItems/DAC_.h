@@ -6,8 +6,16 @@
 class TDAC_Output : public TDataItem
 {
 public:
-	TDAC_Output(TBytes buf) : TDataItem::TDataItem{buf}{};
+	TDAC_Output(TBytes buf);
+	virtual TBytes calcPayload(bool bAsReply=false);
+	virtual std::string AsString(bool bAsReply = false);
+	virtual TDAC_Output &Go();
+protected:
+	__u8 dacChannel = 0;
+	__u16 dacCounts = 0;
 };
+
+
 
 class TDAC_Range1 : public TDataItem
 {

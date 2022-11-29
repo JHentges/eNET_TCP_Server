@@ -44,6 +44,7 @@ class TDataItem;
 typedef std::shared_ptr<TDataItem> PTDataItem;
 typedef std::vector<PTDataItem> TPayload;
 
+// convert integer to hex, no '0x' prefixed
 template <typename T>
 inline std::string to_hex(T i)
 {

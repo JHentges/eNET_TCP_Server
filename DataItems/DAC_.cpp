@@ -1,7 +1,54 @@
+#include "../apci.h"
 #include "../logging.h"
+#include "../config.h"
+#include "../eNET-AIO16-16F.h"
 #include "TDataItem.h"
 #include "DAC_.h"
-#include "../config.h"
+
+TDAC_Output::TDAC_Output(TBytes bytes)
+{
+	Debug("Received: ", bytes);
+	setDId(DAC_Output1);
+	TError result = ERR_SUCCESS;
+	this->Data = bytes;
+
+	if (bytes.size() >= 1)
+	{
+		GUARD(this->Data[0] < 4, ERR_DId_BAD_PARAM, this->Data[0]);
+		this->dacChannel = this->Data[0];
+		this->dacCounts = 0x0000;
+		this->bWrite = false;
+	}
+	if (bytes.size() == 3)
+	{
+		__u16 counts = this->Data[1] | this->Data[2] << 8;
+		this->bWrite = true;
+		this->dacCounts = counts;
+		Log("DAC "+std::to_string(this->dacChannel)+" output: 0x"+to_hex<__u16>(this->dacCounts));
+	}
+	return;
+}
+
+TBytes TDAC_Output::calcPayload(bool bAsReply)
+{
+	TBytes bytes;
+	stuff<__u8>(bytes, this->dacChannel);
+	stuff<__u16>(bytes, this->dacCounts);
+	return bytes;
+}
+
+std::string TDAC_Output::AsString(bool bAsReply)
+{
+	return "DAC_Output("+std::to_string(this->dacChannel)+", 0x"+to_hex<__u16>(this->dacCounts)+")";
+}
+
+TDAC_Output & TDAC_Output::Go()
+{
+	__u32 controlValue = 0x00700000 | (this->dacChannel<<16) | this->dacCounts;
+	out32(ofsDac, controlValue);
+	Debug("Wrote " + std::to_hex<__u32>(controlValue) + " to DAC @ +0x" + std::to_hex<__u8>(ofsDac));
+	return *this;
+}
 
 TDAC_Range1::TDAC_Range1(TBytes bytes)
 {
@@ -76,6 +123,5 @@ TDAC_Range1 &TDAC_Range1::Go()
 
 std::string TDAC_Range1::AsString(bool bAsReply)
 {
-	// NYI
-	return "d";
+	return "DAC_Range1("+std::to_string(this->dacChannel)+",0x"+to_hex<__u32>(this->dacRange)+")";
 };

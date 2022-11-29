@@ -193,6 +193,7 @@ from discord code-review conversation with Daria; these do not belong in this so
 #include <netinet/in.h>
 #include <signal.h>
 #include <unistd.h>
+#include <algorithm>
 
 #define LOGGING_DISABLE
 
